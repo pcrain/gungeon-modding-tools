@@ -7,10 +7,9 @@
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
 
 #Todo:
-#  - verify support for large number of files
-#  - add support for mono tracks
 #  - add support for different (dynamic?) bank ids
 #  - add checking for duplicate IDs (in case strings hash to same thing)
+#  - (maybe) figure out why we have to pretend mono tracks are stereo
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
 #  - (maybe) add support for different HIRC actions
 
@@ -73,6 +72,8 @@ parser.add_argument("--showparse",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) show parse information while parsing BNK / WEM data")
 parser.add_argument("--dumpparse",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) dump parse structure after parsing BNK data")
+parser.add_argument("--skipchecks",   action="store_true",
+  help=f"({col.BLU}debug{col.BLN}) skip sanity checks for parsing bnk files; {col.RED}debug only, can cause crashes{col.BLN}")
 args = parser.parse_args()
 
 # Hashing constants for using FNV-1 to transform strings to ids
@@ -354,7 +355,7 @@ class Decoder(object):
       self.write(fapply(x))
     else:
       raise Exception("Unsupported io")
-    if val is None:
+    if val is None or args.skipchecks:
       outcome = "any"
     elif (x == val) or (isinstance(val,list) and x in val):
       outcome = "good"
@@ -487,14 +488,17 @@ class WEMParser(Parser):
     cc = bs.asShort(root["compression_code"],val=-2, tag="compression code, always -2 for flat bitrate / no compression")
 
     bs.asShort(root["channels"],val=[1,2], tag="number of audio channels (1-2)")
-    bs.asSigned(root["sample_rate"],val=[36000,44100,48000], tag="samples / second")
+    # bs.asSigned(root["sample_rate"],val=[36000,44100,48000], tag="samples / second")
+    bs.asSigned(root["sample_rate"], tag="samples / second")
     bs.asSigned(root["avg_byte_rate"],tag="avg. bytes / second")
 
     # dcsm = bs.asShort([0,2,4,36,72], tag="block align")
-    dcsm = bs.asShort(root["block_align"],val=[2,4], tag="block align? (2 or 4 for our purposes)")
+    # dcsm = bs.asShort(root["block_align"],val=[2,4], tag="block align? (2 or 4 for our purposes)")
+    dcsm = bs.asShort(root["block_align"], tag="block align? (2 or 4 for our purposes)")
     if cc == -2: # no compression
       sample_width = int(root["avg_byte_rate"]) / int(root["sample_rate"]) / int(root["channels"]) * 8
-      bs.asShort(root["sample_width"],val=sample_width, tag="bits per sample")
+      # bs.asShort(root["sample_width"],val=sample_width, tag="bits per sample")
+      bs.asShort(root["sample_width"],tag="bits per sample")
     else:
       bs.asShort(root["sample_width"],tag="bits per sample")
 
@@ -547,13 +551,15 @@ class WEMParser(Parser):
     channels  = wf.getnchannels()
     sampwidth = wf.getsampwidth()
 
+    print(f"for {file}: {rate=} {total=} {channels=} {sampwidth=}")
+
     wavdata   = wf.readframes(total)
 
-    root["channels"]        = channels
+    root["channels"]        = 2 #hack: all sound must be stereo
     root["sample_width"]    = sampwidth*8
-    root["sample_rate"]     = rate
+    root["sample_rate"]     = rate//2*channels #hack: halve sample rate for mono files to compensate
 
-    root["avg_byte_rate"]   = sampwidth * rate * channels
+    root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
 
     root["data_chunk_size"] = len(wavdata)
     root["wav_data"]        = wavdata
@@ -952,7 +958,7 @@ def main():
   vprint(f"  >> writing bank to {col.GRN}{outfile}{col.BLN}")
   bp.saveTo(outfile)
   vprint(">> done :D")
-  print(f"Created soundbank {outfile}")
+  print(f"Created soundbank {outfile} with {len(wavs_to_parse)} .wav files")
 
   # (DEBUG) compute checksums w.r.t. reference bank
   # os.system(f"/bin/md5sum ./ref.bnk {outfile}")
