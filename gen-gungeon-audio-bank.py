@@ -858,8 +858,7 @@ class BNKParser(Parser):
     self.n_embeds += 1
 
     # Set up unique generated ids
-    event_id                 = self.n_embeds+1000000000 # non-magic, needs to be unique
-    # event_id                 = stringToBnkID(base_fname) #TODO: enable this once i can test it
+    event_id                 = stringToBnkID(base_fname)
     wemid                    = self.n_embeds+300000     # non-magic, needs to be unique (can't be less than 300,000???)
     sfx_id                   = self.n_embeds+200000     # non-magic, needs to be unique
     action_id                = self.n_embeds+100000     # non-magic, needs to be unique
@@ -953,9 +952,10 @@ def main():
   vprint(f"  >> writing bank to {col.GRN}{outfile}{col.BLN}")
   bp.saveTo(outfile)
   vprint(">> done :D")
+  print(f"Created soundbank {outfile}")
 
   # (DEBUG) compute checksums w.r.t. reference bank
-  os.system(f"/bin/md5sum ./ref.bnk {outfile}")
+  # os.system(f"/bin/md5sum ./ref.bnk {outfile}")
 
 if __name__ == "__main__":
   main()
