@@ -551,8 +551,6 @@ class WEMParser(Parser):
     channels  = wf.getnchannels()
     sampwidth = wf.getsampwidth()
 
-    print(f"for {file}: {rate=} {total=} {channels=} {sampwidth=}")
-
     wavdata   = wf.readframes(total)
 
     root["channels"]        = 2 #hack: all sound must be stereo
@@ -728,12 +726,12 @@ class BNKParser(Parser):
     self._valid = not bs.failed
     return bs.iostream.getvalue()
 
-  def createMinimal(self):
+  def createMinimal(self,bankid):
     root                    = self.root
     root["bnk_head"]        = b'BKHD'
     root["seclen"]          = 24
     root["version"]         = 128
-    root["bankid"]          = 9999999 #can change?
+    root["bankid"]          = bankid
     root[""]                = 393239870 #magic number
     root[""]                = 0
     root[""]                = 0
@@ -930,9 +928,16 @@ def main():
   vprint(f">> {col.CYN+'recursively '+col.BLN if args.recursive else ''}scanning {col.GRN}{args.input_path}{col.BLN} for wave files")
   wavs_to_parse = findWavsInDirectory(args.input_path,recursive=args.recursive)
 
+  # Generate a bank id from the file name
+  base_bnk_name = os.path.splitext(os.path.basename(args.output_bank_name))[0]
+  bank_id       = stringToBnkID(base_bnk_name)
+
   # Create a sound bank in memory and add our wav files
+  vprint(f"  >> Creating bank with id {bank_id}")
+  bp            = BNKParser().createMinimal(bank_id)
+
+  # Add our .wav files to the sound bank
   vprint(f"  >> embedding {len(wavs_to_parse)} .wav files into sound bank")
-  bp = BNKParser().createMinimal()
   for w in wavs_to_parse:
     vprint(f"    >> embedding {col.GRN}{w}{col.BLN} into sound bank")
     bp.embedFromWav(w)
