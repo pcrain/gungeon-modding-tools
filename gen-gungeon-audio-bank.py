@@ -7,9 +7,8 @@
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
 
 #Todo:
-#  - looping sounds
-#  - different volumes
-#  - music / UI channels
+#  - loading data from spreadsheet
+#  - UI channels
 #  -
 #  - add checking for duplicate IDs (in case strings hash to same thing)
 #  - (maybe) figure out why we have to pretend mono tracks are stereo
@@ -87,8 +86,9 @@ FNV_32_INIT  = 0x811c9dc5 # decimal: 2166136261
 FNV_32_MOD   = 2**32
 
 # Shared magic ids (i think you can safely always use these exact values for gungeon)
-GUNGEON_BUS_ID  = 3803692087 # magic, needs to be shared among sounds
-GUNGEON_RTPC_ID = 3273357900 # magic, needs to be shared among rtpcs
+GUNGEON_BUS_ID        = 3803692087 # magic, needs to be shared among sounds
+GUNGEON_RTPC_ID_SFX   = 3273357900 # magic, needs to be shared among rtpcs (sounds?)
+GUNGEON_RTPC_ID_MUSIC = 2714767868 # magic, needs to be shared among rtpcs (music?)
 
 # Global magic ids (applicable for any WWise sound bank)
 HIRC_TYPE_SFX    = 2 # HIRC event type for a Sound Effect
@@ -486,12 +486,12 @@ class WEMParser(Parser):
     bs.asConst(root["wem_wave"],    val=b"WAVE",  tag="'WAVE'")
 
     bs.asConst(root["fmt_header"], val=b"fmt ",tag="format chunk")
-    # cc = bs.asShort([24,66], tag="????? always 24 or 66")
-    cc = bs.asShort(root[""], val=24, tag="????? always 24 for our purposes")
+    cc = bs.asShort(root[""], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
+    # cc = bs.asShort(root[""], val=24, tag="????? always 24 for our purposes") # 24 =
 
     bs.asShort(root[""],val=0, tag="????? always 0")
     # cc = bs.asShort([-2,-1,2], tag="compression code, always 2, -1, or -2 (flat bitrate / no compression)")
-    cc = bs.asShort(root["compression_code"],val=-2, tag="compression code, always -2 for flat bitrate / no compression")
+    cc = bs.asShort(root["compression_code"],val=[-2,-1], tag="compression code, always -2 for flat bitrate / no compression, -1 = idk")
 
     bs.asShort(root["channels"],val=[1,2], tag="number of audio channels (1-2)")
     # bs.asSigned(root["sample_rate"],val=[36000,44100,48000], tag="samples / second")
@@ -758,13 +758,13 @@ class BNKParser(Parser):
 
     return self
 
-  def addDefaultVolumeRTPCToSFX(self,hirc_root):
+  def addDefaultVolumeRTPCToSFX(self,hirc_root,is_music=False):
     h = hirc_root
     rtpc_curve_id        = self.n_embeds+900000 # non-magic, needs to be unique
 
     h["num_rtpcs"]      += 1
     r                    = h["rtpcs"].next()
-    r["x_axis"]          = GUNGEON_RTPC_ID
+    r["x_axis"]          = GUNGEON_RTPC_ID_MUSIC if is_music else GUNGEON_RTPC_ID_SFX
     r["rtpc_type"]       = 0 # 0 == volume
     r["rtpc_accum"]      = 2 # 2 == additive
     r["rtpc_param"]      = 0
@@ -795,7 +795,7 @@ class BNKParser(Parser):
     h["num_params"] += 1
     h["param_type_list"].append(0) #volume type
     vol = h["param_list"].next()
-    vol["volume"] = 2.0 #volume value
+    vol["volume"] = 1.0 #volume value
     h["subseclen"] += 5
 
   def addDefaultLoopParamToSFX(self,h,num_loops=1):
@@ -924,7 +924,7 @@ class BNKParser(Parser):
     sfx = self.addHircSFX(sfx_id,wfi)
     self.addDefaultVolumeParamToSFX(sfx)
     self.addDefaultLoopParamToSFX(sfx,num_loops=1)
-    self.addDefaultVolumeRTPCToSFX(sfx)
+    self.addDefaultVolumeRTPCToSFX(sfx,is_music=False)
     self.updateHircMetadataFromRef(sfx)
 
     # Create the play action
@@ -980,7 +980,7 @@ def prompt(message, default='y'):
 
 def main():
   if args.readbank:
-    # args.showparse = True
+    args.showparse = True
     args.dumpparse = True
     b = BNKParser()
     b.loadFrom(args.input_path)
