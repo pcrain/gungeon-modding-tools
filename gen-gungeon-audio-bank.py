@@ -7,7 +7,6 @@
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
 
 #Todo:
-#  - stop events
 #  - looping sounds
 #  - different volumes
 #  - music / UI channels
@@ -793,10 +792,17 @@ class BNKParser(Parser):
     self.root["hircobjects"].append(h.val)
 
   def addDefaultVolumeParamToSFX(self,h):
-    h["num_params"] += 1 #set to 1 if you want volume
+    h["num_params"] += 1
     h["param_type_list"].append(0) #volume type
     vol = h["param_list"].next()
     vol["volume"] = 2.0 #volume value
+    h["subseclen"] += 5
+
+  def addDefaultLoopParamToSFX(self,h,num_loops=1):
+    h["num_params"] += 1
+    h["param_type_list"].append(58) #loop type
+    loop = h["param_list"].next()
+    loop["num_loops"] = num_loops #number of loops (0 == infinite)
     h["subseclen"] += 5
 
   def addHircSFX(self,sfx_id,wfi):
@@ -917,6 +923,7 @@ class BNKParser(Parser):
     # Create the hirc SFX data
     sfx = self.addHircSFX(sfx_id,wfi)
     self.addDefaultVolumeParamToSFX(sfx)
+    self.addDefaultLoopParamToSFX(sfx,num_loops=1)
     self.addDefaultVolumeRTPCToSFX(sfx)
     self.updateHircMetadataFromRef(sfx)
 
