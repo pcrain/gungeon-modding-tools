@@ -18,7 +18,7 @@
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
 
 # Import necessary modules
-import sys, os, struct, io, wave, argparse
+import sys, os, struct, io, wave, csv, argparse
 
 # Install pyaudio and and uncomment below line to use playWAVData()
 #   (tested with Python 3.9, may not work with Python 3.10 and up)
@@ -62,6 +62,8 @@ parser.add_argument("output_bank_name",
   help=f"name of output bank; puts in {col.YLW}input_path{col.BLN} unless absolute path is given")
 parser.add_argument("-v", "--verbose",   action="store_true",
   help=f"print verbose information")
+parser.add_argument("-s", "--spreadsheet",
+  help=f"load sound effect information from {col.YLW}spreadsheet{col.BLN}; creates an example spreadsheet if none exists")
 parser.add_argument("-r", "--recursive", action="store_true",
   help=f"recursively scan subfolders of {col.YLW}input_path{col.BLN} for .wav files")
 parser.add_argument("-w", "--create_wems", action="store_true",
@@ -74,10 +76,10 @@ parser.add_argument("--showparse",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) show parse information while parsing BNK / WEM data")
 parser.add_argument("--dumpparse",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) dump parse structure after parsing BNK data")
-parser.add_argument("--skipchecks",   action="store_true",
-  help=f"({col.BLU}debug{col.BLN}) skip sanity checks for parsing bnk files; {col.RED}debug only, can cause crashes{col.BLN}")
 parser.add_argument("--readbank",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) dump a sound bank to the console (useful for reverse engineering)")
+parser.add_argument("--skipchecks",   action="store_true",
+  help=f"({col.BLU}debug{col.BLN}) skip sanity checks for parsing bnk files; {col.RED}debug only, can cause crashes{col.BLN}")
 args = parser.parse_args()
 
 # Hashing constants for using FNV-1 to transform strings to ids
@@ -87,8 +89,13 @@ FNV_32_MOD   = 2**32
 
 # Shared magic ids (i think you can safely always use these exact values for gungeon)
 GUNGEON_BUS_ID        = 3803692087 # magic, needs to be shared among sounds
-GUNGEON_RTPC_ID_SFX   = 3273357900 # magic, needs to be shared among rtpcs (sounds?)
-GUNGEON_RTPC_ID_MUSIC = 2714767868 # magic, needs to be shared among rtpcs (music?)
+GUNGEON_RTPC_ID_SFX   = 3273357900 # magic, needs to be shared among rtpcs (sound channel)
+GUNGEON_RTPC_ID_MUSIC = 2714767868 # magic, needs to be shared among rtpcs (music channel)
+
+# Unknown RTPC_IDs
+# 3139137016 # unknown, global volume, very loud
+# 766806760  # unknown, global volume, very loud
+# 1395692419 # unknown, global volume, very loud
 
 # Global magic ids (applicable for any WWise sound bank)
 HIRC_TYPE_SFX    = 2 # HIRC event type for a Sound Effect
@@ -159,7 +166,6 @@ def playWAVData(data,channels,rate,samplebits):
 # - https://www.audiokinetic.com/library/edge/?source=SDK&id=_ak_f_n_v_hash_8h_source.html
 # - https://www.audiokinetic.com/library/edge/?source=SDK&id=namespace_a_k_1_1_sound_engine_a1aae6ebdec25946fb2897ce0e025366d.html#a1aae6ebdec25946fb2897ce0e025366d
 def stringToBnkID(string):
-    print(f"generating id for {string}")
     data = string.lower().encode()
     hval = FNV_32_INIT
     for byte in data:
@@ -398,7 +404,7 @@ class Decoder(object):
     if self.iomode == "read":
       cb = lambda x: struct.unpack('<f', x)[0]
     else:
-      cb = lambda x: struct.pack('<f', int(x))
+      cb = lambda x: struct.pack('<f', float(x))
     return self.readAndEval(ref, 4, cb, val=val, tag=tag)
 
   def asSigned(self,ref,*,val=None,tag=None):
@@ -584,10 +590,18 @@ class WEMParser(Parser):
 
 # Parser for Gungeon BNK Data
 class BNKParser(Parser):
+  default_sound_params = {
+    "volume"  : 1.0,
+    "loops"   : 1,
+    "channel" : "sound", #can also be "music" (and hopefully, in the future, "ui"))
+  }
+
   def __init__(self):
     super(BNKParser, self).__init__()
-    self.n_embeds        = 0 #number of files currently embedded for wave export purposes
-    self.next_wem_offset = 0 #byte offset within data section of next embedded WEM
+    self.n_embeds        = 0  #number of files currently embedded for wave export purposes
+    self.next_wem_offset = 0  #byte offset within data section of next embedded WEM
+    self.sound_params    = {} #sound parameters
+    self.embedded_files  = [] #list of filenames for embedded waves
 
   def parse(self,decoder,root,mode):
     super(BNKParser, self).parse(decoder,root,mode)
@@ -758,6 +772,19 @@ class BNKParser(Parser):
 
     return self
 
+  def createExampleSpreadsheet(self,fname):
+    keys = ["name"] + [k for k in self.default_sound_params.keys()]
+    rows = [keys]
+    for f in self.embedded_files:
+      rows.append([f] + [v for k,v in self.default_sound_params.items()])
+    with open(fname,'w') as fout:
+      writer = csv.writer(fout)
+      for row in rows:
+        writer.writerow(row)
+
+  def setSoundParams(self,sound_params):
+    self.sound_params = sound_params
+
   def addDefaultVolumeRTPCToSFX(self,hirc_root,is_music=False):
     h = hirc_root
     rtpc_curve_id        = self.n_embeds+900000 # non-magic, needs to be unique
@@ -791,11 +818,11 @@ class BNKParser(Parser):
     self.root["hirc_numobjects"] += 1
     self.root["hircobjects"].append(h.val)
 
-  def addDefaultVolumeParamToSFX(self,h):
+  def addDefaultVolumeParamToSFX(self,h,volume=1.0):
     h["num_params"] += 1
     h["param_type_list"].append(0) #volume type
     vol = h["param_list"].next()
-    vol["volume"] = 1.0 #volume value
+    vol["volume"] = volume #volume value
     h["subseclen"] += 5
 
   def addDefaultLoopParamToSFX(self,h,num_loops=1):
@@ -887,7 +914,17 @@ class BNKParser(Parser):
     h["events"].append(action_id)
 
   def embedFromWav(self,wavfile):
-    base_fname = os.path.splitext(os.path.basename(wavfile))[0]
+    base_fname   = os.path.splitext(os.path.basename(wavfile))[0]
+    self.embedded_files.append(base_fname)
+    sound_params = None
+
+    if base_fname in self.sound_params:
+      sound_params = self.sound_params[base_fname]
+      vprint(f"      >> Found custom sound params {sound_params} for {base_fname}")
+    else:
+      sound_params = self.default_sound_params
+      vprint(f"      >> Using default sound params {sound_params} for {base_fname}")
+
     root           = self.root
     self.n_embeds += 1
 
@@ -922,9 +959,9 @@ class BNKParser(Parser):
 
     # Create the hirc SFX data
     sfx = self.addHircSFX(sfx_id,wfi)
-    self.addDefaultVolumeParamToSFX(sfx)
-    self.addDefaultLoopParamToSFX(sfx,num_loops=1)
-    self.addDefaultVolumeRTPCToSFX(sfx,is_music=False)
+    self.addDefaultVolumeParamToSFX(sfx,volume=sound_params.get("volume",1.0))
+    self.addDefaultLoopParamToSFX(sfx,num_loops=sound_params.get("loops",1))
+    self.addDefaultVolumeRTPCToSFX(sfx,is_music=sound_params.get("channel","sound")=="music")
     self.updateHircMetadataFromRef(sfx)
 
     # Create the play action
@@ -978,7 +1015,21 @@ def prompt(message, default='y'):
     values = ('y', 'yes', '') if choices == 'Y/n' else ('y', 'yes')
     return choice.strip().lower() in values
 
+def loadSoundParamsFromCSV(csvfile):
+    with open(csvfile,'r') as fin:
+      reader = csv.reader(fin)
+      header = [s.strip() for s in next(reader)]
+      ddict = {}
+      for row in reader:
+        ddict[row[0].strip()] = {header[i] : row[i].strip() for i in range(1,len(header))}
+    return ddict
+
 def main():
+  sound_params = None
+  if args.spreadsheet and os.path.exists(args.spreadsheet):
+    vprint(f">> Loading sound parameters from {args.spreadsheet}")
+    sound_params = loadSoundParamsFromCSV(args.spreadsheet)
+
   if args.readbank:
     args.showparse = True
     args.dumpparse = True
@@ -998,6 +1049,9 @@ def main():
   # Create a sound bank in memory and add our wav files
   vprint(f"  >> Creating bank with id {bank_id}")
   bp            = BNKParser().createMinimal(bank_id)
+
+  if sound_params is not None:
+    bp.setSoundParams(sound_params)
 
   # Add our .wav files to the sound bank
   vprint(f"  >> embedding {len(wavs_to_parse)} .wav files into sound bank")
@@ -1027,6 +1081,10 @@ def main():
   bp.saveTo(outfile)
   vprint(">> done :D")
   print(f"Created soundbank {outfile} with {len(wavs_to_parse)} .wav files")
+
+  if args.spreadsheet and not os.path.exists(args.spreadsheet):
+    bp.createExampleSpreadsheet(args.spreadsheet)
+    print(f"Saved example spreadhseet to {args.spreadsheet}")
 
   # (DEBUG) compute checksums w.r.t. reference bank
   # os.system(f"/bin/md5sum ./ref.bnk {outfile}")
