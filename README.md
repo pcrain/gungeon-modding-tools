@@ -17,6 +17,11 @@ Basic Usage:
   - from shell: gen-gungeon-audio-bank.py <path to folder containing wavs> <path to output .bnk>
     - can pass a spreadsheet of audio data with -s to set volume, loops, and channel (sound / music) information
     - if the spreadsheet does not exist, one will be created with default values and can be edited later
+    - valid fields:
+      - name: base name of audio file (without path or file extension)
+      - volume: the volume of the audio file in game (default: 1.0)
+      - loops: the number of times the audio file should loop (0 == infinite, default: 1)
+      - channel: the channel the audio plays on; can be "sound" or "music" (default: "sound")
   - in C# project: AkSoundEngine.PostEvent("<name of original wav without extension>", ETGModMainBehaviour.Instance.gameObject);
   - run the script with the `-h` flag for more info
 ```
