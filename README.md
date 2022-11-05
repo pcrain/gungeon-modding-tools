@@ -22,6 +22,8 @@ Basic Usage:
       - volume: the volume of the audio file in game (default: 1.0)
       - loops: the number of times the audio file should loop (0 == infinite, default: 1)
       - channel: the channel the audio plays on; can be "sound" or "music" (default: "sound")
-  - in C# project: AkSoundEngine.PostEvent("<name of original wav without extension>", ETGModMainBehaviour.Instance.gameObject);
+  - in C# project: AkSoundEngine.PostEvent(eventname, ETGModMainBehaviour.Instance.gameObject), where eventname="<name of original wav without extension>";
+    - can use eventname+"_stop" to stop playing an audio file w.r.t. to the current game object
+    - can use eventname+"_stop_all" to stop playing all instances of the audio file
   - run the script with the `-h` flag for more info
 ```
