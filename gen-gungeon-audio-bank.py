@@ -7,7 +7,11 @@
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
 
 #Todo:
-#  - add support for different (dynamic?) bank ids
+#  - stop events
+#  - looping sounds
+#  - different volumes
+#  - music / UI channels
+#  -
 #  - add checking for duplicate IDs (in case strings hash to same thing)
 #  - (maybe) figure out why we have to pretend mono tracks are stereo
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
@@ -74,6 +78,8 @@ parser.add_argument("--dumpparse",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) dump parse structure after parsing BNK data")
 parser.add_argument("--skipchecks",   action="store_true",
   help=f"({col.BLU}debug{col.BLN}) skip sanity checks for parsing bnk files; {col.RED}debug only, can cause crashes{col.BLN}")
+parser.add_argument("--readbank",   action="store_true",
+  help=f"({col.BLU}debug{col.BLN}) dump a sound bank to the console (useful for reverse engineering)")
 args = parser.parse_args()
 
 # Hashing constants for using FNV-1 to transform strings to ids
@@ -154,6 +160,7 @@ def playWAVData(data,channels,rate,samplebits):
 # - https://www.audiokinetic.com/library/edge/?source=SDK&id=_ak_f_n_v_hash_8h_source.html
 # - https://www.audiokinetic.com/library/edge/?source=SDK&id=namespace_a_k_1_1_sound_engine_a1aae6ebdec25946fb2897ce0e025366d.html#a1aae6ebdec25946fb2897ce0e025366d
 def stringToBnkID(string):
+    print(f"generating id for {string}")
     data = string.lower().encode()
     hval = FNV_32_INIT
     for byte in data:
@@ -830,7 +837,7 @@ class BNKParser(Parser):
   def addHircPlayAction(self,action_id,sfx_id):
     h                           = Ref({})
     h["type"]                   = HIRC_TYPE_ACTION
-    h["subseclen"]              = 18 #always 18?
+    h["subseclen"]              = 18 #always 18 for play events?
     h["action_id"]              = action_id
     h["action_scope"]           = 3 # 3 == game object, 2 == global
     h["action_type"]            = 4 # 4 == play, 1 == stop
@@ -840,6 +847,23 @@ class BNKParser(Parser):
     h["action_props_2"]         = 0
     h["action_play_fade_curve"] = 4 # 4 == linear
     h["bank_id"]                = int(self.root["bankid"])
+    return h
+
+  def addHircStopAction(self,action_id,sfx_id,stop_all=False):
+    h                               = Ref({})
+    h["type"]                       = HIRC_TYPE_ACTION
+    h["subseclen"]                  = 16 #always 16 for stop events?
+    h["action_id"]                  = action_id
+    h["action_scope"]               = 2 if stop_all else 3 # 3 == game object, 2 == global
+    h["action_type"]                = 1 # 4 == play, 1 == stop
+    h["action_sfx_id"]              = sfx_id
+    h["action_bus_bits"]            = 0
+    h["action_props_1"]             = 0
+    h["action_props_2"]             = 0
+    h["action_stop_fade_curve"]     = 4 # 4 == linear
+    h["action_stop_flags"]          = 6 # 6 == magic number
+    h["action_stop_num_exceptions"] = 0
+    h["bank_id"]                    = int(self.root["bankid"])
     return h
 
   def addHircEvent(self,event_id):
@@ -862,11 +886,17 @@ class BNKParser(Parser):
     self.n_embeds += 1
 
     # Set up unique generated ids
-    event_id                 = stringToBnkID(base_fname)
-    wemid                    = self.n_embeds+300000     # non-magic, needs to be unique (can't be less than 300,000???)
-    sfx_id                   = self.n_embeds+200000     # non-magic, needs to be unique
-    action_id                = self.n_embeds+100000     # non-magic, needs to be unique
-    vprint(f"      >> event id for playing '{base_fname}' -> {event_id}")
+    play_event_id      = stringToBnkID(base_fname)
+    stop_event_id      = stringToBnkID(base_fname+"_stop")
+    stop_all_event_id  = stringToBnkID(base_fname+"_stop_all")
+    wemid              = self.n_embeds+300000     # non-magic, needs to be unique (can't be less than 300,000???)
+    sfx_id             = self.n_embeds+200000     # non-magic, needs to be unique
+    play_action_id     = self.n_embeds+100000     # non-magic, needs to be unique
+    stop_action_id     = self.n_embeds+110000     # non-magic, needs to be unique
+    stop_all_action_id = self.n_embeds+120000     # non-magic, needs to be unique
+    vprint(f"      >> event id for playing      '{base_fname}' -> {play_event_id}")
+    vprint(f"      >> event id for stopping     '{base_fname}' -> {stop_event_id}")
+    vprint(f"      >> event id for stopping all '{base_fname}' -> {stop_all_event_id}")
 
     # Load the wavfile as a WEM
     wp = WEMParser().loadFromWavFile(wavfile)
@@ -891,13 +921,31 @@ class BNKParser(Parser):
     self.updateHircMetadataFromRef(sfx)
 
     # Create the play action
-    play_action = self.addHircPlayAction(action_id,sfx_id)
+    play_action = self.addHircPlayAction(play_action_id,sfx_id)
     self.updateHircMetadataFromRef(play_action)
 
     # Create the play event
-    play_event = self.addHircEvent(event_id)
-    self.addHircActionToHircEvent(action_id,play_event)
+    play_event = self.addHircEvent(play_event_id)
+    self.addHircActionToHircEvent(play_action_id,play_event)
     self.updateHircMetadataFromRef(play_event)
+
+    # Create the stop action
+    stop_action = self.addHircStopAction(stop_action_id,sfx_id,stop_all=False)
+    self.updateHircMetadataFromRef(stop_action)
+
+    # Create the stop event
+    stop_event = self.addHircEvent(stop_event_id)
+    self.addHircActionToHircEvent(stop_action_id,stop_event)
+    self.updateHircMetadataFromRef(stop_event)
+
+    # Create the stop all action
+    stop_all_action = self.addHircStopAction(stop_all_action_id,sfx_id,stop_all=True)
+    self.updateHircMetadataFromRef(stop_all_action)
+
+    # Create the stop all event
+    stop_all_event = self.addHircEvent(stop_all_event_id)
+    self.addHircActionToHircEvent(stop_all_action_id,stop_all_event)
+    self.updateHircMetadataFromRef(stop_all_event)
 
     return self
 
@@ -924,6 +972,14 @@ def prompt(message, default='y'):
     return choice.strip().lower() in values
 
 def main():
+  if args.readbank:
+    # args.showparse = True
+    args.dumpparse = True
+    b = BNKParser()
+    b.loadFrom(args.input_path)
+    b.root.dump()
+    return
+
   # build list of wav files to parse
   vprint(f">> {col.CYN+'recursively '+col.BLN if args.recursive else ''}scanning {col.GRN}{args.input_path}{col.BLN} for wave files")
   wavs_to_parse = findWavsInDirectory(args.input_path,recursive=args.recursive)
