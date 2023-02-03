@@ -5,15 +5,19 @@
 #References:
 #  - BNK File Format: https://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
+#  - In dumped SFX.bnk.xml, Actor Mixer 189241348 references all music and probably controls volume (<fld ty="sid" na="ulID" va="189241348"/>)
+#     - 3649037401 = STOP_MUS_ALL
+#     - 1075162602 = Play_MUS_Boss_Theme_Beholster
 
 #Todo:
-#  - loading data from spreadsheet
-#  - UI channels
+#  - figure out pausing music on pause screen
+#  - figure out looping music
 #  -
 #  - add checking for duplicate IDs (in case strings hash to same thing)
+#  - (maybe) add support for different HIRC actions
+#  - (maybe) UI channels
 #  - (maybe) figure out why we have to pretend mono tracks are stereo
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
-#  - (maybe) add support for different HIRC actions
 
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
 
@@ -598,10 +602,11 @@ class BNKParser(Parser):
 
   def __init__(self):
     super(BNKParser, self).__init__()
-    self.n_embeds        = 0  #number of files currently embedded for wave export purposes
-    self.next_wem_offset = 0  #byte offset within data section of next embedded WEM
-    self.sound_params    = {} #sound parameters
-    self.embedded_files  = [] #list of filenames for embedded waves
+    self.n_embeds        = 0     #number of files currently embedded for wave export purposes
+    self.next_wem_offset = 0     #byte offset within data section of next embedded WEM
+    self.sound_params    = {}    #sound parameters
+    self.embedded_files  = []    #list of filenames for embedded waves
+    self.is_music        = False #whether we're currently parsing music
 
   def parse(self,decoder,root,mode):
     super(BNKParser, self).parse(decoder,root,mode)
@@ -720,7 +725,7 @@ class BNKParser(Parser):
         bs.asSigned(h["subseclen"]       ,tag=f"Action {i} subsection length")
         bs.asSigned(h["action_id"]       ,tag=f"Action {i} ID")
         bs.asByte(h["action_scope"]    ,tag=f"Action {i} action scope (3 == game object, 2 = global)")
-        bs.asByte(h["action_type"]     ,val=[4,1],tag=f"Action {i} action type (4 == play, 1 == stop)")
+        bs.asByte(h["action_type"]     ,val=[1,2,3,4],tag=f"Action {i} action type (1 == stop, 2 pause, 3 resume, 4 play)")
         bs.asSigned(h["action_sfx_id"]   ,tag=f"Action {i} game object (SFX) id")
         bs.asByte(h["action_bus_bits"] ,tag=f"Action {i} bus bits")
         bs.asByte(h["action_props_1"]  ,val=0,tag=f"Action {i} props (needs to be 0)")
@@ -732,6 +737,13 @@ class BNKParser(Parser):
           bs.asByte(h["action_stop_fade_curve"]     ,tag=f"Action {i} stop fade curve (4 == linear)")
           bs.asByte(h["action_stop_flags"]          ,val=6,tag=f"Action {i} stop bit flags (6 == expected)")
           bs.asByte(h["action_stop_num_exceptions"] ,val=0,tag=f"Action {i} stop exception list size (needs to be 0)")
+        elif int(h["action_type"]) in [2,3]: #pause / resume
+          resume = int(h["action_type"]) == 3
+          flags = 6 if resume else 7
+          name = "resume" if resume else "pause"
+          bs.asByte(h["action_pause_fade_curve"]     ,tag=f"Action {i} {name} fade curve (4 == linear)")
+          bs.asByte(h["action_pause_flags"]          ,val=[6,7],tag=f"Action {i} {name} bit flags (6 or 7 == expected)")
+          bs.asByte(h["action_pause_num_exceptions"] ,val=0,tag=f"Action {i} {name} exception list size (needs to be 0)")
         else:
           raise Exception("don't know how to handle this event type")
 
@@ -785,13 +797,13 @@ class BNKParser(Parser):
   def setSoundParams(self,sound_params):
     self.sound_params = sound_params
 
-  def addDefaultVolumeRTPCToSFX(self,hirc_root,is_music=False):
+  def addDefaultVolumeRTPCToSFX(self,hirc_root):
     h = hirc_root
     rtpc_curve_id        = self.n_embeds+900000 # non-magic, needs to be unique
 
     h["num_rtpcs"]      += 1
     r                    = h["rtpcs"].next()
-    r["x_axis"]          = GUNGEON_RTPC_ID_MUSIC if is_music else GUNGEON_RTPC_ID_SFX
+    r["x_axis"]          = GUNGEON_RTPC_ID_MUSIC if self.is_music else GUNGEON_RTPC_ID_SFX
     r["rtpc_type"]       = 0 # 0 == volume
     r["rtpc_accum"]      = 2 # 2 == additive
     r["rtpc_param"]      = 0
@@ -882,12 +894,29 @@ class BNKParser(Parser):
     h["bank_id"]                = int(self.root["bankid"])
     return h
 
+  def addHircPauseAction(self,action_id,sfx_id,resume=False):
+    h                                = Ref({})
+    h["type"]                        = HIRC_TYPE_ACTION
+    h["subseclen"]                   = 16 #always 16 for pause events?
+    h["action_id"]                   = action_id
+    h["action_scope"]                = 4 if self.is_music else 3 # 3 == game object, 2 == global, 4 == also global???
+    h["action_type"]                 = 3 if resume else 2 # 2 == pause, 3 = resume
+    h["action_sfx_id"]               = sfx_id
+    h["action_bus_bits"]             = 0
+    h["action_props_1"]              = 0
+    h["action_props_2"]              = 0
+    h["action_pause_fade_curve"]     = 4 # 4 == linear
+    h["action_pause_flags"]          = 7 # magic numbers (7 allows a master pause / resume)
+    h["action_pause_num_exceptions"] = 0
+    h["bank_id"]                     = int(self.root["bankid"])
+    return h
+
   def addHircStopAction(self,action_id,sfx_id,stop_all=False):
     h                               = Ref({})
     h["type"]                       = HIRC_TYPE_ACTION
     h["subseclen"]                  = 16 #always 16 for stop events?
     h["action_id"]                  = action_id
-    h["action_scope"]               = 2 if stop_all else 3 # 3 == game object, 2 == global
+    h["action_scope"]               = 2 if (stop_all or self.is_music) else 3 # 3 == game object, 2 == global
     h["action_type"]                = 1 # 4 == play, 1 == stop
     h["action_sfx_id"]              = sfx_id
     h["action_bus_bits"]            = 0
@@ -925,19 +954,27 @@ class BNKParser(Parser):
       sound_params = self.default_sound_params
       vprint(f"      >> Using default sound params {sound_params} for {base_fname}")
 
+    self.is_music = sound_params.get("channel","sound")=="music"
+
     root           = self.root
     self.n_embeds += 1
 
     # Set up unique generated ids
     play_event_id      = stringToBnkID(base_fname)
+    pause_event_id     = stringToBnkID(base_fname+"_pause")
+    resume_event_id    = stringToBnkID(base_fname+"_resume")
     stop_event_id      = stringToBnkID(base_fname+"_stop")
     stop_all_event_id  = stringToBnkID(base_fname+"_stop_all")
     wemid              = self.n_embeds+300000     # non-magic, needs to be unique (can't be less than 300,000???)
     sfx_id             = self.n_embeds+200000     # non-magic, needs to be unique
     play_action_id     = self.n_embeds+100000     # non-magic, needs to be unique
-    stop_action_id     = self.n_embeds+110000     # non-magic, needs to be unique
-    stop_all_action_id = self.n_embeds+120000     # non-magic, needs to be unique
+    pause_action_id    = self.n_embeds+110000     # non-magic, needs to be unique
+    resume_action_id   = self.n_embeds+120000     # non-magic, needs to be unique
+    stop_action_id     = self.n_embeds+130000     # non-magic, needs to be unique
+    stop_all_action_id = self.n_embeds+140000     # non-magic, needs to be unique
     vprint(f"      >> event id for playing      '{base_fname}' -> {play_event_id}")
+    vprint(f"      >> event id for pausing      '{base_fname}' -> {pause_event_id}")
+    vprint(f"      >> event id for resuming     '{base_fname}' -> {resume_event_id}")
     vprint(f"      >> event id for stopping     '{base_fname}' -> {stop_event_id}")
     vprint(f"      >> event id for stopping all '{base_fname}' -> {stop_all_event_id}")
 
@@ -961,7 +998,7 @@ class BNKParser(Parser):
     sfx = self.addHircSFX(sfx_id,wfi)
     self.addDefaultVolumeParamToSFX(sfx,volume=sound_params.get("volume",1.0))
     self.addDefaultLoopParamToSFX(sfx,num_loops=sound_params.get("loops",1))
-    self.addDefaultVolumeRTPCToSFX(sfx,is_music=sound_params.get("channel","sound")=="music")
+    self.addDefaultVolumeRTPCToSFX(sfx)
     self.updateHircMetadataFromRef(sfx)
 
     # Create the play action
@@ -972,6 +1009,24 @@ class BNKParser(Parser):
     play_event = self.addHircEvent(play_event_id)
     self.addHircActionToHircEvent(play_action_id,play_event)
     self.updateHircMetadataFromRef(play_event)
+
+    # Create the pause action
+    pause_action = self.addHircPauseAction(pause_action_id,sfx_id,resume=False)
+    self.updateHircMetadataFromRef(pause_action)
+
+    # Create the pause event
+    pause_event = self.addHircEvent(pause_event_id)
+    self.addHircActionToHircEvent(pause_action_id,pause_event)
+    self.updateHircMetadataFromRef(pause_event)
+
+    # Create the resume action
+    resume_action = self.addHircPauseAction(resume_action_id,sfx_id,resume=True)
+    self.updateHircMetadataFromRef(resume_action)
+
+    # Create the resume event
+    resume_event = self.addHircEvent(resume_event_id)
+    self.addHircActionToHircEvent(resume_action_id,resume_event)
+    self.updateHircMetadataFromRef(resume_event)
 
     # Create the stop action
     stop_action = self.addHircStopAction(stop_action_id,sfx_id,stop_all=False)
@@ -1091,3 +1146,4 @@ def main():
 
 if __name__ == "__main__":
   main()
+  # print(stringToBnkID("Play_MUS_Boss_Theme_Beholster")) #1075162602

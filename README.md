@@ -25,5 +25,7 @@ Basic Usage:
   - in C# project: AkSoundEngine.PostEvent(eventname, ETGModMainBehaviour.Instance.gameObject), where eventname="<name of original wav without extension>";
     - can use eventname+"_stop" to stop playing an audio file w.r.t. to the current game object
     - can use eventname+"_stop_all" to stop playing all instances of the audio file
+    - can use eventname+"_pause" to pause the currently playing audio globally (only tested with music, not normal sounds)
+    - can use eventname+"_resume" to resume the currently playing audio globally (only tested with music, not normal sounds)
   - run the script with the `-h` flag for more info
 ```
