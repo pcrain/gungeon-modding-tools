@@ -2,16 +2,17 @@
 
 ## Files
 
-| Filename                  | Description                                           |
-|:--------------------------|:------------------------------------------------------|
-| gen-gungeon-audio-bank.py | generate WWise audio banks from a folder of WAV files |
-|                           |                                                       |
+| Filename                           | Description                                             |
+| :--------------------------        | :------------------------------------------------------ |
+| gen-gungeon-audio-bank.py          | generate WWise audio banks from a folder of WAV files   |
+| gungeon-gun-sprite-json-creator.py | visual editor for hand attach points on gun sprites     |
+|                                    |                                                         |
 
 ### gen-gungeon-audio-bank.py
 
 ```
 Requirements:
-  - python 3.9
+  - python 3.9+
 
 Basic Usage:
   - from shell: gen-gungeon-audio-bank.py <path to folder containing wavs> <path to output .bnk>
@@ -28,4 +29,38 @@ Basic Usage:
     - can use eventname+"_pause" to pause the currently playing audio globally (only tested with music, not normal sounds)
     - can use eventname+"_resume" to resume the currently playing audio globally (only tested with music, not normal sounds)
   - run the script with the `-h` flag for more info
+```
+
+### gungeon-gun-sprite-json-creator.py
+
+```
+Requirements:
+  - python 3.11+ (might work with 3.9, untested)
+  - dearpygui, pillow, numpy, screeninfo
+    - you can install all of the above with `pip install --user --break-system-packages dearpygui pillow numpy screeninfo`
+
+Basic Usage:
+  - running `gungeon-gun-sprite-json-creator.py` will open an editor interface and initiate a file picker dialog
+    - opening a PNG of a gun sprite will automatically load its corresponding JSON file, if it exists
+    - you can optionally pass the path to the sprite on the command line to open it directly
+    - the editor will remember the last opened file upon closing
+  - clicking anywhere on the image of the open gun will modify its attach points
+    - attach points can be enabled / disabled by clicking on the corresponding enable / disable buttons
+    - left click = change main hand attach point
+    - right click = change off hand attach point
+    - shift + left click = change clip attach point
+    - shift + right click = change casing attach point
+  - click "Save Changes" to save the data to a JSON with the same name as the sprite
+  - click "Revert Changes" to discard all changes without saving
+  - click "Import / Edit Gun Data" to open a new image for attach point editing
+
+Advanced Usage:
+  - every button has a corresponding keyboard shortcut (shown beside it) for faster navigation
+  - the left pane lets you scroll through and quickly open all images in the same directory as the currently open image
+    - the search field above the pane lets you filter the list by name
+  - checking "Autosave on switch / exit" will automatically save changes when opening a new gun or closing the program
+  - checking "Don't warn about overwriting file" will suppress the popup when attempting to save over existing gun data
+  - clicking "Copy Gun Data" will copy the current attach points and enable / disable status to an internal clipboard
+  - clicking "Paste Gun Data" will paste attach point data from the last copied gun over the current one
+    - useful for editing multiple frames with similar attach points
 ```
