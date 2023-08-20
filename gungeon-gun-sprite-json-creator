@@ -35,13 +35,16 @@ _attach_point_coords = { p.name : (0,0) for p in _attach_points}
 _active_attach_point = _attach_points[0]
 
 #Globals that should probably be refactored
-orig_width      = 0
-orig_height     = 0
-current_file    = ""
-current_dir     = ""
-clipboard       = None
-clipboard_file  = None
-unsaved_changes = False
+orig_width         = 0
+orig_height        = 0
+current_file       = ""
+current_dir        = ""
+current_search     = ""
+dir_file_list      = []
+filtered_file_list = []
+clipboard          = None
+clipboard_file     = None
+unsaved_changes    = False
 
 #Config globals
 jconf = {
@@ -409,12 +412,17 @@ def load_new_image(filename):
   dpg.pop_container_stack()
 
   if changed_dir:
-    files = [f[:-4] for f in filter(lambda x: x.endswith(".png"), os.listdir(current_dir))]
-    dpg.configure_item("file picker box", items=sorted(files), default_value=current_file.replace(".png",""))
+    global dir_file_list, filtered_file_list
+    dir_file_list = sorted([f[:-4] for f in filter(lambda x: x.endswith(".png"), os.listdir(current_dir))])
+    filtered_file_list = dir_file_list
+    update_file_list(filtered_file_list)
 
   load_json_from_dict(get_default_gun_json(orig_width, orig_height))
   clear_unsaved_changes()
   set_config("last_file", filename)
+
+def update_file_list(filelist):
+    dpg.configure_item("file picker box", items=filelist, default_value=current_file.replace(".png",""))
 
 def load_json_from_dict(jdata):
   # Temporarily disable all previews
@@ -465,11 +473,21 @@ def set_current_file_from_picker_box(sender, app_data):
 def open_import_dialog():
   if dpg.does_item_exist("import dialog"):
     dpg.delete_item("import dialog")
-  with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, callback=set_current_file_from_import_dialog, tag="import dialog"):
+  with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
     dpg.add_file_extension(".*", color=(255, 255, 255, 255))
     dpg.add_file_extension("Image or Image Data files (*.png, *.json){.png,.json}", color=(0, 255, 255, 255))
     dpg.add_file_extension(".png", color=(255, 255, 0, 255))
     dpg.add_file_extension(".json", color=(255, 0, 255, 255))
+
+def filter_files(_, query):
+  global current_search, filtered_file_list, dir_file_list
+  if current_search in query:
+    base_list = filtered_file_list # slight optimization for not looking through whole file list
+  else:
+    base_list = dir_file_list
+  filtered_file_list = [f for f in base_list if query in f]
+  update_file_list(filtered_file_list)
+  current_search = query
 
 def main(filename):
   if (filename is not None) and (not os.path.exists(filename)):
@@ -485,7 +503,8 @@ def main(filename):
   with dpg.window(label="Files List", tag="mainwindow", width=1200, height=800, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      with dpg.group(horizontal=False, width=300, height=800, tag="filewidget"):
+      with dpg.group(horizontal=False, width=300, height=800, tag="filewidget", tracked=True):
+        dpg.add_input_text(width=256, hint="filter files", callback=filter_files, tag="file search box")
         dpg.add_listbox([], tag="file picker box", num_items=45, tracked=True, callback=set_current_file_from_picker_box)
         pass
       # Set up the rest our widget
@@ -509,10 +528,10 @@ def main(filename):
               # no easy way to get this to work with listpicker, so hidden by default
               dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
               dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
-              dpg.add_separator()
+              # dpg.add_separator()
 
               # Import button
-              dpg.add_button(label="Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
+              dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
               # Save button with modal
               dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
               colorize_button("export button", (0,128,128,255))
