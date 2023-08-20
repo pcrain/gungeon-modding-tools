@@ -12,15 +12,17 @@ try:
   import dearpygui.dearpygui as dpg
   import numpy as np
   from PIL import Image
+  import screeninfo
 except:
   def install_package(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", package])
   try:
-    for package in ["dearpygui", "numpy", "pillow"]:
+    for package in ["dearpygui", "numpy", "pillow", "screeninfo"]:
       install_package(package)
     import dearpygui.dearpygui as dpg
     import numpy as np
     from PIL import Image
+    import screeninfo
   except:
     print("failed to install dearpygui, numpy, and/or pillow")
     sys.exit(2)
@@ -38,7 +40,9 @@ SHORTCUT_COLOR    = (192, 255, 255, 255)
 BLACK             = (0, 0, 0, 255)
 THIN_WHITE        = (255, 255, 255, 64)
 DRAWLIST_PAD      = 64
+WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
+LIST_ITEM_HEIGHT  = 18 # estimated through experimentation
 
 AttachPoint = namedtuple('AttachPoint', ['name', 'tag_base', 'internal_name', 'color', 'shortcut', 'enabled_default'])
 _attach_points = [
@@ -522,22 +526,34 @@ def save_changes_from_shortcut():
       dpg.configure_item("save modal", show=True)
 
 def main(filename):
+  global orig_width, orig_height
+
+  # Make sure we actually have a valid filename passed (or None)
   if (filename is not None) and (not os.path.exists(filename)):
     print(f"{filename} doesn't exist!")
     return
 
-  global orig_width, orig_height
+  # Get monitor info
+  for m in screeninfo.get_monitors():
+    mw, mh = m.width, m.height
+    break
+
+  # Compute window dimensions
+  ww = mw - 2 * WINDOW_PAD
+  wh = mh - 2 * WINDOW_PAD
+
+  # Set up dearpygui
   dpg.create_context()
-  dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', x_pos=100, y_pos=100, width=1720, height=880, resizable=False)
+  dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
   dpg.setup_dearpygui()
 
   # Set up the main window
-  with dpg.window(label="Files List", tag="mainwindow", width=1720, height=880, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
+  with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      with dpg.group(horizontal=False, width=300, height=880, tag="filewidget", tracked=True):
+      with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
         dpg.add_input_text(width=256, hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box")
-        dpg.add_listbox([], tag="file picker box", num_items=49, tracked=True, callback=set_current_file_from_picker_box)
+        dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, tracked=True, callback=set_current_file_from_picker_box)
         pass
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
