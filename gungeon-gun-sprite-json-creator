@@ -1,13 +1,29 @@
 #!/usr/bin/python
 #Gungeon JSON visualizer and creator
 
-import os, sys, subprocess, shlex, json, array
+#  Manually install missing packages with:
+#    pip install --user --break-system-packages dearpygui numpy pillow
+
+import os, sys, subprocess, shlex, json, array, importlib
 from collections import namedtuple
 
-import dearpygui.dearpygui as dpg
-import dearpygui.demo as demo
-import numpy as np
-from PIL import Image
+# Install missing packages as necessary
+try:
+  import dearpygui.dearpygui as dpg
+  import numpy as np
+  from PIL import Image
+except:
+  def install_package(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", package])
+  try:
+    for package in ["dearpygui", "numpy", "pillow"]:
+      install_package(package)
+    import dearpygui.dearpygui as dpg
+    import numpy as np
+    from PIL import Image
+  except:
+    print("failed to install dearpygui, numpy, and/or pillow")
+    sys.exit(2)
 
 PROGRAM_NAME      = "gungeon-json-editor"
 TEST_IMAGE_2      = "/home/pretzel/uploads/omitb-gun-sprites-jsons/alphabeam_idle_003.png"
@@ -18,6 +34,7 @@ ENABLED_STRING    = " Enabled" #note the space
 DISABLED_STRING   = "Disabled"
 ENABLED_COLOR     = (64, 128, 64, 255)
 DISABLED_COLOR    = (64, 0, 0, 255)
+SHORTCUT_COLOR    = (192, 255, 255, 255)
 BLACK             = (0, 0, 0, 255)
 THIN_WHITE        = (255, 255, 255, 64)
 DRAWLIST_PAD      = 64
@@ -451,6 +468,8 @@ def load_json_from_file(filename):
   load_json_from_dict(jdata)
 
 def set_current_file_from_import_dialog(sender, app_data):
+  dpg.configure_item("import dialog", show=False)
+
   for _, filename in app_data.get("selections",{}).items():
     stem = filename.replace(".json","").replace(".png","")
     break
@@ -472,12 +491,16 @@ def set_current_file_from_picker_box(sender, app_data):
 
 def open_import_dialog():
   if dpg.does_item_exist("import dialog"):
+    if dpg.does_item_exist("import keyboard handler"):
+      dpg.delete_item("import keyboard handler")
     dpg.delete_item("import dialog")
   with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
-    dpg.add_file_extension(".*", color=(255, 255, 255, 255))
-    dpg.add_file_extension("Image or Image Data files (*.png, *.json){.png,.json}", color=(0, 255, 255, 255))
+    dpg.add_file_extension("Gungeon Data files {.png,.json}", color=(0, 255, 255, 255))
     dpg.add_file_extension(".png", color=(255, 255, 0, 255))
     dpg.add_file_extension(".json", color=(255, 0, 255, 255))
+    with dpg.handler_registry(tag="import keyboard handler"):
+      dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item("import dialog", show=False))
+      dpg.add_key_release_handler(key=dpg.mvKey_Return, callback=lambda: set_current_file_from_import_dialog(None, dpg.get_file_dialog_info("import dialog")))
 
 def filter_files(_, query):
   global current_search, filtered_file_list, dir_file_list
@@ -489,6 +512,15 @@ def filter_files(_, query):
   update_file_list(filtered_file_list)
   current_search = query
 
+def save_changes_from_shortcut():
+  if jconf["no_warn_overwrite"]:
+    export_callback()
+  else:
+    print("checking...")
+    if dpg.does_item_exist("save modal"):
+      # print("found modal")
+      dpg.configure_item("save modal", show=True)
+
 def main(filename):
   if (filename is not None) and (not os.path.exists(filename)):
     print(f"{filename} doesn't exist!")
@@ -496,16 +528,16 @@ def main(filename):
 
   global orig_width, orig_height
   dpg.create_context()
-  dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', width=1200, height=800, resizable=False)
+  dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', x_pos=100, y_pos=100, width=1720, height=880, resizable=False)
   dpg.setup_dearpygui()
 
   # Set up the main window
-  with dpg.window(label="Files List", tag="mainwindow", width=1200, height=800, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
+  with dpg.window(label="Files List", tag="mainwindow", width=1720, height=880, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      with dpg.group(horizontal=False, width=300, height=800, tag="filewidget", tracked=True):
-        dpg.add_input_text(width=256, hint="filter files", callback=filter_files, tag="file search box")
-        dpg.add_listbox([], tag="file picker box", num_items=45, tracked=True, callback=set_current_file_from_picker_box)
+      with dpg.group(horizontal=False, width=300, height=880, tag="filewidget", tracked=True):
+        dpg.add_input_text(width=256, hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box")
+        dpg.add_listbox([], tag="file picker box", num_items=49, tracked=True, callback=set_current_file_from_picker_box)
         pass
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
@@ -531,21 +563,32 @@ def main(filename):
               # dpg.add_separator()
 
               # Import button
-              dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
-              # Save button with modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
-              colorize_button("export button", (0,128,128,255))
-              # Save button without modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button noprompt", show=False)
-              colorize_button("export button noprompt", (0,128,128,255))
-              dpg.add_button(label="No Changes To Save", callback=export_callback, tag="no export button", show=False)
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
+              # Save button
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
+                # with modal
+                dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
+                colorize_button("export button", (0,128,128,255))
+                # without modal
+                dpg.add_button(label="Save Changes", callback=export_callback, tag="export button noprompt", show=False)
+                colorize_button("export button noprompt", (0,128,128,255))
+                dpg.add_button(label="No Changes To Save", callback=export_callback, tag="no export button", show=False)
               # Revert button
-              dpg.add_button(label="Revert Changes", callback=revert_callback, tag="revert button", show=False)
-              colorize_button("revert button", (128,64,64,255))
-              dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag="no revert button", show=False)
-
-              dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Revert Changes", callback=revert_callback, tag="revert button", show=False)
+                colorize_button("revert button", (128,64,64,255))
+                dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag="no revert button", show=False)
+              # Copy Button
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
+              # Paste Button
               with dpg.group(horizontal=True, tag="paste box"):
+                dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
                 dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
                 dpg.add_text("", tag="paste filename")
 
@@ -563,6 +606,21 @@ def main(filename):
   with dpg.handler_registry(tag="global mouse handler"):
     m_drag = dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Left, callback=on_mouse_dragged)
     m_drag = dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Right, callback=on_right_mouse_dragged)
+
+  # Set up some global keyboard shortcuts
+  with dpg.handler_registry(tag="global keyboard handler"):
+    # Ctrl + C = copy gun data
+    dpg.add_key_press_handler(key=dpg.mvKey_C, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and copy_state())
+    # Ctrl + V = paste gun data
+    dpg.add_key_press_handler(key=dpg.mvKey_V, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and paste_state())
+    # Ctrl + O = open gun data
+    dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and open_import_dialog())
+    # Ctrl + F = focus file filter box
+    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and dpg.focus_item("file search box"))
+    # Ctrl + S = save active gun changes
+    dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and save_changes_from_shortcut())
+    # Ctrl + Z = revert active gun changes
+    dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and revert_callback())
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
