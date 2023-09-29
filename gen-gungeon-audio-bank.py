@@ -1,9 +1,11 @@
 #!/usr/bin/python
 #Script for generating WWise sound banks for Enter the Gungeon modding
 #  Run with -h flag for usage information
+#  Note: volume is measured in dB gain, not percentage
 
 #References:
 #  - BNK File Format: https://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
+#    - Backup Link:   https://web.archive.org/web/20230817173834/http://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
 #  - WEM File Format: https://github.com/WolvenKit/wwise-audio-tools/blob/master/ksy/wem.ksy
 #  - In dumped SFX.bnk.xml, Actor Mixer 189241348 references all music and probably controls volume (<fld ty="sid" na="ulID" va="189241348"/>)
 #     - 3649037401 = STOP_MUS_ALL
@@ -12,6 +14,7 @@
 #Todo:
 #  - figure out pausing music on pause screen
 #  - figure out looping music
+#  - figure out why 8-bit WAVs make Gungeon explode (e.g., minish cap sounds)
 #  -
 #  - add checking for duplicate IDs (in case strings hash to same thing)
 #  - (maybe) add support for different HIRC actions
@@ -571,7 +574,9 @@ class WEMParser(Parser):
 
     root["channels"]        = 2 #hack: all sound must be stereo
     root["sample_width"]    = sampwidth*8
-    root["sample_rate"]     = rate//2*channels #hack: halve sample rate for mono files to compensate
+    root["sample_rate"]     = channels*rate//2 #hack: halve sample rate for mono files to compensate
+
+    # vprint(f"Data: rate={rate}, channels={channels}, frames={total}, width={sampwidth}")
 
     root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
 
@@ -972,11 +977,11 @@ class BNKParser(Parser):
     resume_action_id   = self.n_embeds+120000     # non-magic, needs to be unique
     stop_action_id     = self.n_embeds+130000     # non-magic, needs to be unique
     stop_all_action_id = self.n_embeds+140000     # non-magic, needs to be unique
-    vprint(f"      >> event id for playing      '{base_fname}' -> {play_event_id}")
-    vprint(f"      >> event id for pausing      '{base_fname}' -> {pause_event_id}")
-    vprint(f"      >> event id for resuming     '{base_fname}' -> {resume_event_id}")
-    vprint(f"      >> event id for stopping     '{base_fname}' -> {stop_event_id}")
-    vprint(f"      >> event id for stopping all '{base_fname}' -> {stop_all_event_id}")
+    vprint(f"      >> event id for playing      '{base_fname            }' -> {play_event_id}")
+    vprint(f"      >> event id for pausing      '{base_fname+'_pause'   }' -> {pause_event_id}")
+    vprint(f"      >> event id for resuming     '{base_fname+'_resume'  }' -> {resume_event_id}")
+    vprint(f"      >> event id for stopping     '{base_fname+'_stop'    }' -> {stop_event_id}")
+    vprint(f"      >> event id for stopping all '{base_fname+'_stop_all'}' -> {stop_all_event_id}")
 
     # Load the wavfile as a WEM
     wp = WEMParser().loadFromWavFile(wavfile)

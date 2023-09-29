@@ -4,6 +4,9 @@
 #  Manually install missing packages with:
 #    pip install --user --break-system-packages dearpygui numpy pillow
 
+# Todo:
+#   - figure out previewing indexed color images
+
 import os, sys, subprocess, shlex, json, array, importlib
 from collections import namedtuple
 
@@ -374,6 +377,7 @@ def toggle_element(element, override=None):
   layer = f"{element} layer"
   if dpg.does_alias_exist(layer):
     dpg.configure_item(layer, show=new_enabled)
+  mark_unsaved_changes()
 
 def generate_controls(p):
   name = p.name
@@ -396,6 +400,7 @@ def load_new_image(filename):
 
   # Load and resize the image internally since pygui doesn't seem to support nearest neighbor scaling
   pil_image = Image.open(filename)
+  # pil_image = pil_image.convert(mode='P', palette=Image.Palette.ADAPTIVE)
   orig_width, orig_height = pil_image.size
   scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
   scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
@@ -524,6 +529,8 @@ def save_changes_from_shortcut():
     if dpg.does_item_exist("save modal"):
       # print("found modal")
       dpg.configure_item("save modal", show=True)
+    else:
+      export_callback()
 
 def main(filename):
   global orig_width, orig_height
@@ -642,6 +649,8 @@ def main(filename):
   load_config()
   if filename is None:
     filename = get_config("last_file") or None
+    if not os.path.exists(filename):
+      filename = None
   if filename is not None:
     load_new_image(filename)
     if os.path.exists(jf := filename.replace(".png",".json")):

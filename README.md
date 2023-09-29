@@ -20,7 +20,7 @@ Basic Usage:
     - if the spreadsheet does not exist, one will be created with default values and can be edited later
     - valid fields:
       - name: base name of audio file (without path or file extension)
-      - volume: the volume of the audio file in game (default: 1.0)
+      - volume: the decibel volume adjustent of the audio file in game; can be negative (default: 1.0)
       - loops: the number of times the audio file should loop (0 == infinite, default: 1)
       - channel: the channel the audio plays on; can be "sound" or "music" (default: "sound")
   - in C# project: AkSoundEngine.PostEvent(eventname, ETGModMainBehaviour.Instance.gameObject), where eventname="<name of original wav without extension>";
@@ -29,6 +29,10 @@ Basic Usage:
     - can use eventname+"_pause" to pause the currently playing audio globally (only tested with music, not normal sounds)
     - can use eventname+"_resume" to resume the currently playing audio globally (only tested with music, not normal sounds)
   - run the script with the `-h` flag for more info
+
+Known Bugs:
+  - 8-bit PCM files seem to crash, so convert to 16-bit LE PCM wav before using
+  - ~~stereo files tend to crash, so please convert .WAV files to mono format before using~~ should be fixed
 ```
 
 ### gungeon-gun-sprite-json-creator.py
