@@ -203,7 +203,8 @@ def findWavsInDirectory(path,recursive=False):
     p = os.path.join(path,f)
     if os.path.isdir(p) and recursive:
       wavs_to_parse.extend(findWavsInDirectory(p,True))
-    if not ((p.endswith(".wav") and isWaveFile(p)) or p.endswith(".ogg")):
+    # if not ((p.endswith(".wav") and isWaveFile(p)) or p.endswith(".ogg")):
+    if not ((p.endswith(".wav") and isWaveFile(p))):
       continue
     wavs_to_parse.append(p)
   return wavs_to_parse
