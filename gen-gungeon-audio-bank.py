@@ -1004,7 +1004,7 @@ class BNKParser(Parser):
     h["parent_id"]            = 0
     h["misc_flags"]           = 0
     h["num_params"]           = 0
-    h["property_bundle"]      = 0
+    h["num_range_modifiers"]  = 0
     h["positioning_data"]     = 7
     h["aux_params"]           = 0
     h["priority_tiebreak"]    = 0
