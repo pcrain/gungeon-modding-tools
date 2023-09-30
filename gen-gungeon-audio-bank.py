@@ -62,8 +62,7 @@
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
 
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
-ENABLE_OGG = True # not working for now
-ENABLE_OGG = False # not working for now
+ENABLE_OGG = False # not working for now and corrupts entire soundbank if enabled, do not use
 
 # Import necessary modules
 import sys, os, struct, io, wave, csv, argparse, time
@@ -616,18 +615,30 @@ class WEMParser(Parser):
 
     extra_bytes = bs.asShort(root["extra_bytes"],val=fmt_size-18, tag="extra byte count == fmt_size - 18 (always 6 for WAVs and 48 for oggs)")
     bs.asShort(root["extra_unk"], tag="2 unknown extra bytes")
+    true_extra_bytes = extra_bytes - 4 # discount header
 
-    if extra_bytes == 48: #extra ogg data
-      #42
-      #40
+    if true_extra_bytes == 44: #extra ogg data
       bs.asSigned(root["ogg_subtype"], tag="ogg subtype")
-      #36 vorb bytes
+      #Begin Vorbis header 0x00
       bs.asSigned(root["ogg_sample_count"], tag="ogg sample count")
-      #32
+      #0x04
       bs.asUnsigned(root["ogg_mod_signal"], tag="ogg mod signal")
-      #28
-      print(bs.asAny(root["ogg_bytes"], 34, tag="28 unknown ogg bytes"))
-    elif extra_bytes in [8,6]:
+      #0x08
+      bs.asAny(root["ogg_unknown_1"], 8, tag="unknown ogg bytes")
+      #0x10
+      bs.asUnsigned(root["ogg_setup_packet_offset"], tag="ogg setup packet offset")
+      #0x14
+      bs.asUnsigned(root["ogg_first_audio_packet_offset"], tag="ogg first audio packet offset")
+      #0x18
+      bs.asAny(root["ogg_unknown_2"], 12, tag="unknown ogg bytes")
+      #0x24
+      bs.asUnsigned(root["ogg_uid"], tag="ogg uid")
+      #0x28
+      bs.asByte(root["ogg_blocksize_0_pow"], tag="ogg blocksize 0 pow")
+      #0x29
+      bs.asByte(root["ogg_blocksize_1_pow"], tag="ogg blocksize 1 pow")
+      #0x2A
+    elif true_extra_bytes in [4,2]:
       bs.asSigned(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
       # bs.asShort(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
     else:
@@ -653,7 +664,7 @@ class WEMParser(Parser):
         data_size = bs.asSigned(root["data_chunk_size"], tag="data chunk size") #can't compute size if nested
         wavdata = bs.asAny(root["wav_data"],data_size,tag="WAV data")
         if data_size == 1512084:# and data_size == 91152:# or data_size == 70884:# or data_size == 1512084:
-          print("FOUND IT")
+          print("FOUND BEHOLSTER SONG")
           # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, 1, int(root["sample_rate"]), int(root["sample_width"]))
           # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, int(root["channels"]), int(root["sample_rate"]), int(root["sample_width"]))
           # playWAVData(wavdata, int(root["channels"]), int(root["sample_rate"]), 8)
@@ -679,7 +690,7 @@ class WEMParser(Parser):
 
       with open(f"/home/pretzel/downloads/gungeon-sounds/beholster.wem", 'wb') as fout:
         fout.write(wemdata[start_bytes:bs.bytes_read])
-      time.sleep(100)
+      # time.sleep(100)
     return wemdata
 
   def createMinimal(self, isOgg):
@@ -690,19 +701,25 @@ class WEMParser(Parser):
     root["fmt_header"]       = b"fmt "
     root["fmt_size"]         = 66 if isOgg else 24
     root[""]                 = 0
-    root["compression_code"] = -1 if isOgg else -2      # no compression
+    root["compression_code"] = -1 if isOgg else -2 # -2 == no compression
     root["channels"]         = None
     root["sample_rate"]      = None
     root["avg_byte_rate"]    = None
     root["block_align"]      = 0 if isOgg else 4
     root["sample_width"]     = 0 if isOgg else None
-    root["extra_bytes"]      = 48 if isOgg else 6
-    root["extra_unk"]        = 0 # need to edit?
+    root["extra_bytes"]      = int(root["fmt_size"]) - 18
+    root["extra_unk"]        = 0
     if isOgg:
-      root["ogg_subtype"]      = 0 # need to edit?
-      root["ogg_sample_count"] = None
-      root["ogg_mod_signal"]   = 0 # need to edit?
-      root["ogg_bytes"]      = b'0' * 28
+      root["ogg_subtype"]                   = 12546
+      root["ogg_sample_count"]              = None
+      root["ogg_mod_signal"]                = 186 # unknown if this affects codebooks
+      root["ogg_unknown_1"]                 = b'\x14\xfb\x16\x00\x00\x00@\x00' #b'\0'*8 # need to edit?
+      root["ogg_setup_packet_offset"]       = 6016 # hardcode for beholster, need to edit
+      root["ogg_first_audio_packet_offset"] = int(root["ogg_mod_signal"]) + int(root["ogg_setup_packet_offset"])
+      root["ogg_unknown_2"]                 = b'\x05\x01@\x00\xf43\x00\x00\x945\x00\x00' #b'\0'*12 # need to edit?
+      root["ogg_uid"]                       = 2840645231 # hardcode for beholster, need to edit?
+      root["ogg_blocksize_0_pow"]           = 8
+      root["ogg_blocksize_1_pow"]           = 11
     else:
       root["valid_bits"]       = 12546
     root["junk_header"]      = b"JUNK"
@@ -725,17 +742,17 @@ class WEMParser(Parser):
     samples   = wf.frames
 
     with open(file, 'rb') as fin:
-      wavdata = fin.read() #[58:] # skip first 58 bytes
-    # wavdata = wf.read(dtype="int16")
+      wavdata = fin.read()[3675:] #[58:] # skip first 58 bytes
+    # wavdata = wf.read(dtype="int32")
     # wavdata = wf.read(dtype="int32")
     # wavdata = wf.read(dtype="float64")
     print(f"ogg data: rate: {rate}, total: {total}, channels {channels}, data: {len(wavdata)} frames")
 
-    root["channels"]        = channels # 2 #hack: all sound must be stereo
-    root["sample_rate"]     = rate #hack: halve sample rate for mono files to compensate
+    root["channels"]        = channels
+    root["sample_rate"]     = rate
 
-    root["avg_byte_rate"]   = 0 # don't know how to compute
-    root["ogg_sample_count"] = samples
+    root["avg_byte_rate"]   = 10458 # 0 # don't know how to compute
+    root["ogg_sample_count"] = 6350400 # samples
 
     root["data_chunk_size"] = len(wavdata) #* 2#4#8
     root["wav_data"]        = wavdata
