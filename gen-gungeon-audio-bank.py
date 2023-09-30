@@ -68,8 +68,8 @@ ENABLE_OGG = False # not working for now and corrupts entire soundbank if enable
 import sys, os, struct, io, wave, csv, argparse, time
 # Only needed for reading ogg files
 import pyaudio
-import numpy as np
-from soundfile import SoundFile
+# import numpy as np
+# from soundfile import SoundFile
 
 # Install pyaudio and and uncomment below line to use playWAVData()
 #   (tested with Python 3.9, may not work with Python 3.10 and up)
@@ -587,19 +587,14 @@ class WEMParser(Parser):
 
     bs.asConst(root["fmt_header"], val=b"fmt ",tag="format chunk")
     fmt_size = bs.asShort(root["fmt_size"], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
-    # cc = bs.asShort(root[""], val=24, tag="????? always 24 for our purposes") # 24 =
 
     bs.asShort(root[""],val=0, tag="????? always 0")
-    # cc = bs.asShort([-2,-1,2], tag="compression code, always 2, -1, or -2 (flat bitrate / no compression)")
     cc = bs.asShort(root["compression_code"],val=[-2,-1, 2], tag="compression code, always -2 for flat bitrate / no compression, -1 = ogg compression?, 2 = wav compression?")
 
     bs.asShort(root["channels"],val=[1,2], tag="number of audio channels (1-2)")
-    # bs.asSigned(root["sample_rate"],val=[36000,44100,48000], tag="samples / second")
     bs.asSigned(root["sample_rate"], tag="samples / second")
     bs.asSigned(root["avg_byte_rate"],tag="avg. bytes / second")
 
-    # dcsm = bs.asShort([0,2,4,36,72], tag="block align")
-    # dcsm = bs.asShort(root["block_align"],val=[2,4], tag="block align? (2 or 4 for our purposes)")
     blockalignbytes = bs.asShort(root["block_align"], tag="block align? (2 or 4 for our purposes, 36 and 72 also seen)")
     if cc == -2: # no compression
       sample_width = int(root["avg_byte_rate"]) / int(root["sample_rate"]) / int(root["channels"]) * 8
@@ -610,15 +605,14 @@ class WEMParser(Parser):
     elif cc == 2: # ogg???
       bs.asShort(root["sample_width"],tag="bits per sample")
     else:
-      raise Exception("u messed up")
-      pass # o.o
+      raise Exception("unrecognized compression format")
 
     extra_bytes = bs.asShort(root["extra_bytes"],val=fmt_size-18, tag="extra byte count == fmt_size - 18 (always 6 for WAVs and 48 for oggs)")
     bs.asShort(root["extra_unk"], tag="2 unknown extra bytes")
     true_extra_bytes = extra_bytes - 4 # discount header
 
     if true_extra_bytes == 44: #extra ogg data
-      bs.asSigned(root["ogg_subtype"], tag="ogg subtype")
+      bs.asSigned(root["ogg_subtype"], tag="ogg subtype") # same as valid bits
       #Begin Vorbis header 0x00
       bs.asSigned(root["ogg_sample_count"], tag="ogg sample count")
       #0x04
@@ -663,20 +657,20 @@ class WEMParser(Parser):
       elif bs.speculate(root["data_header"], val=b"data",tag="data chunk"):
         data_size = bs.asSigned(root["data_chunk_size"], tag="data chunk size") #can't compute size if nested
         wavdata = bs.asAny(root["wav_data"],data_size,tag="WAV data")
-        if data_size == 1512084:# and data_size == 91152:# or data_size == 70884:# or data_size == 1512084:
-          print("FOUND BEHOLSTER SONG")
-          # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, 1, int(root["sample_rate"]), int(root["sample_width"]))
-          # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, int(root["channels"]), int(root["sample_rate"]), int(root["sample_width"]))
-          # playWAVData(wavdata, int(root["channels"]), int(root["sample_rate"]), 8)
-          # A1 = np.frombuffer(wavdata, dtype=np.int8)
-          # A2 = np.pad(A1, (2, 2 + (4 - (len(A1) % 4))))
-          # A = np.frombuffer(A2, dtype=np.int16)
-          # b = A.byteswap()
-          # if cc == -2:
-          # playWAVData(b, int(root["channels"]), int(root["sample_rate"]), 8)
-          # with open(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}", 'wb') as fout:
-          #   fout.write(wavdata)
-          time.sleep(100000)
+        # if data_size == 1512084:# and data_size == 91152:# or data_size == 70884:# or data_size == 1512084:
+        #   print("FOUND BEHOLSTER SONG")
+        #   saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, 1, int(root["sample_rate"]), int(root["sample_width"]))
+        #   saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, int(root["channels"]), int(root["sample_rate"]), int(root["sample_width"]))
+        #   playWAVData(wavdata, int(root["channels"]), int(root["sample_rate"]), 8)
+        #   A1 = np.frombuffer(wavdata, dtype=np.int8)
+        #   A2 = np.pad(A1, (2, 2 + (4 - (len(A1) % 4))))
+        #   A = np.frombuffer(A2, dtype=np.int16)
+        #   b = A.byteswap()
+        #   if cc == -2:
+        #   playWAVData(b, int(root["channels"]), int(root["sample_rate"]), 8)
+        #   with open(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}", 'wb') as fout:
+        #     fout.write(wavdata)
+        #   time.sleep(100000)
         break
 
       else:
@@ -685,12 +679,10 @@ class WEMParser(Parser):
           break
 
     wemdata = bs.iostream.getvalue()
-    if data_size == 1512084:
-      print(f"FOUND: read {bs.bytes_read - start_bytes}")
-
-      with open(f"/home/pretzel/downloads/gungeon-sounds/beholster.wem", 'wb') as fout:
-        fout.write(wemdata[start_bytes:bs.bytes_read])
-      # time.sleep(100)
+    # if data_size == 1512084:
+    #   print(f"FOUND: read {bs.bytes_read - start_bytes}")
+    #   with open(f"/home/pretzel/downloads/gungeon-sounds/beholster.wem", 'wb') as fout:
+    #     fout.write(wemdata[start_bytes:bs.bytes_read])
     return wemdata
 
   def createMinimal(self, isOgg):
