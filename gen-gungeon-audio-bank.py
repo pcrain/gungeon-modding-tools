@@ -614,13 +614,11 @@ class WEMParser(Parser):
       raise Exception("u messed up")
       pass # o.o
 
-    # bs.asSigned([6,48], tag="extra byte count? always 6 or 48")
-    extra_bytes = bs.asSigned(root["extra_bytes"],val=fmt_size-18, tag="extra byte count == fmt_size - 18 (always 6 for WAVs and 48 for oggs)")
-    true_extra_bytes = extra_bytes - 6 # discount the extra_bytes field itself and the valid_bits field
+    extra_bytes = bs.asShort(root["extra_bytes"],val=fmt_size-18, tag="extra byte count == fmt_size - 18 (always 6 for WAVs and 48 for oggs)")
+    bs.asShort(root["extra_unk"], tag="2 unknown extra bytes")
 
-    if true_extra_bytes == 42: #extra ogg data
+    if extra_bytes == 48: #extra ogg data
       #42
-      # bs.asSigned(root["ogg_extra_unk"], tag="2 unknown extra ogg bytes")
       #40
       bs.asSigned(root["ogg_subtype"], tag="ogg subtype")
       #36 vorb bytes
@@ -629,7 +627,7 @@ class WEMParser(Parser):
       bs.asUnsigned(root["ogg_mod_signal"], tag="ogg mod signal")
       #28
       print(bs.asAny(root["ogg_bytes"], 34, tag="28 unknown ogg bytes"))
-    elif true_extra_bytes in [2,0]:
+    elif extra_bytes in [8,6]:
       bs.asSigned(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
       # bs.asShort(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
     else:
@@ -699,8 +697,8 @@ class WEMParser(Parser):
     root["block_align"]      = 0 if isOgg else 4
     root["sample_width"]     = 0 if isOgg else None
     root["extra_bytes"]      = 48 if isOgg else 6
+    root["extra_unk"]        = 0 # need to edit?
     if isOgg:
-      # root["ogg_extra_unk"]    = 0 # need to edit?
       root["ogg_subtype"]      = 0 # need to edit?
       root["ogg_sample_count"] = None
       root["ogg_mod_signal"]   = 0 # need to edit?
