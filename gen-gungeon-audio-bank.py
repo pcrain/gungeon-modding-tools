@@ -526,7 +526,7 @@ class WEMParser(Parser):
     bs.asConst(root["wem_wave"],    val=b"WAVE",  tag="'WAVE'")
 
     bs.asConst(root["fmt_header"], val=b"fmt ",tag="format chunk")
-    cc = bs.asShort(root[""], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
+    cc = bs.asShort(root["fmt_type"], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
     # cc = bs.asShort(root[""], val=24, tag="????? always 24 for our purposes") # 24 =
 
     bs.asShort(root[""],val=0, tag="????? always 0")
@@ -594,9 +594,9 @@ class WEMParser(Parser):
     root["wem_length"]       = None
     root["wem_wave"]         = b"WAVE"
     root["fmt_header"]       = b"fmt "
-    root[""]                 = 24
+    root["fmt_type"]         = 66 if isOgg else 24
     root[""]                 = 0
-    root["compression_code"] = -2      # no compression
+    root["compression_code"] = -1 if isOgg else -2      # no compression
     root["channels"]         = None
     root["sample_rate"]      = None
     root["avg_byte_rate"]    = None
@@ -622,7 +622,11 @@ class WEMParser(Parser):
     channels  = wf.channels
     sampwidth = 2 #UNKOWNN wf.get_sample_size()
 
-    wavdata = wf.read(dtype="int32")
+    with open(file, 'rb') as fin:
+      wavdata = fin.read()
+    # wavdata = wf.read(dtype="int16")
+    # wavdata = wf.read(dtype="int32")
+    # wavdata = wf.read(dtype="float64")
     print(f"ogg data: rate: {rate}, total: {total}, channels {channels}, width: {sampwidth}, data: {len(wavdata)} frames")
 
     root["channels"]        = 2 # 2 #hack: all sound must be stereo
@@ -633,7 +637,7 @@ class WEMParser(Parser):
 
     root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
 
-    root["data_chunk_size"] = len(wavdata) * 4#8
+    root["data_chunk_size"] = len(wavdata) #* 2#4#8
     root["wav_data"]        = wavdata
 
     root["wem_length"]      = root["data_chunk_size"] + 56
@@ -747,8 +751,7 @@ class BNKParser(Parser):
       if h["type"] == 2: #sound effect
         bs.asSigned(h["subseclen"]      ,tag=f"SFX {i} subsection length")
         bs.asSigned(h["sfx_id"]         ,tag=f"SFX {i} ID")
-        bs.asSigned(h["plugin_id"]      ,val=[65537,262145],tag=f"SFX {i} PluginID (65537 = PCM, 262145 = VORBIS)")
-         # PAC_NOTE:  here
+        bs.asSigned(h["plugin_id"]      ,val=[65537,262145,131073],tag=f"SFX {i} PluginID (65537 = PCM, 131073 = ADPCM, 262145 = VORBIS)")
         bs.asByte(h["external_state"] ,val=0,tag=f"SFX {i} external state (should be 0 == embedded)")
         if h["external_state"] == 0:
           bs.asSigned(h["wem_file_id"]        ,val=wemids,tag=f"SFX {i} WEM file id")
@@ -756,13 +759,16 @@ class BNKParser(Parser):
         else:
           raise Exception("don't know how to handle this event type")
         bs.asByte(h["sfx_unknown"] ,val=0,tag=f"SFX {i} source bits (usually 0, see uSourceBits in XML)")
-        # print()
 
         #begin sound structure section
-        bs.asByte(h["sfx_override_parent"]  ,val=0,tag=f"SFX {i} override parent")
-        bs.asByte(h["num_fx"]               ,tag=f"SFX {i} number of effects")
-        for i in range(int(h["num_fx"])):
-          raise Exception("don't know how to handle this event type")
+        bs.asByte(h["sfx_override_parent"]  ,val=[0,1],tag=f"SFX {i} override parent")
+        num_fx = bs.asByte(h["num_fx"]               ,tag=f"SFX {i} number of effects")
+        if num_fx > 0:
+          bs.asByte(h["fx_bypass"]               ,tag=f"SFX {i} bits effects bypass?")
+          for j in range(num_fx):
+            bs.asAny(h[""], 7, tag=f"SFX {i} FX {j} effect data")
+            # raise Exception("don't know how to handle this event type")
+
         bs.asByte(h["override_attachments"] ,tag=f"SFX {i} override attachments")
         bs.asUnsigned(h["bus_id"]               ,tag=f"SFX {i} bus id")
         bs.asSigned(h["parent_id"]            ,tag=f"SFX {i} parent object id")
@@ -779,12 +785,27 @@ class BNKParser(Parser):
           elif t == 58: #loop
             bs.asSigned(p["num_loops"],tag=f"SFX {i} param {j} num loops (float, 0 == inf)")
           else:
-            bs.asAny(p["param_value"] ,val=4,tag=f"SFX {i} param {j} value")
+            bs.asAny(p["param_value"], 4, tag=f"SFX {i} unknown param {j} value")
 
-        bs.asByte(h["property_bundle"]  ,tag=f"SFX {i} property bundle")
-        bs.asByte(h["positioning_data"] ,tag=f"SFX {i} positioning data (7 is good)")
+        num_range_mods = bs.asByte(h["num_range_modifiers"], tag=f"SFX {i} num additional range paramters")
+        for j in range(num_range_mods):
+          p = h["range_param_type_list"].next()
+          bs.asByte(p,tag=f"SFX {i} range param {j} type")
+        for j in range(num_range_mods):
+          p = h["range_param_list"].next()
+          bs.asFloat(p["min_value"],tag=f"SFX {i} range param {j} min value (float)")
+          bs.asFloat(p["min_value"],tag=f"SFX {i} range param {j} max value (float)")
 
-        bs.asByte(h["aux_params"]           ,tag=f"SFX {i} aux parameters")
+        pos_data = bs.asByte(h["positioning_data"] ,tag=f"SFX {i} positioning data (7 is normal)")
+        if pos_data & 0b10000: # 3D bit is set
+          bs.asByte(h["positioning_data_3d"] ,tag=f"SFX {i} 3D positioning data")
+          bs.asSigned(p["3d_attenuation_id"],tag=f"SFX {i} param {j} 3D attenutation id")
+
+        aux = bs.asByte(h["aux_params"]           ,tag=f"SFX {i} aux parameters (if 4rd bit is set, we have aux params)")
+        if aux & 0b1000:
+          for j in range(4): # always exactly 4
+            auxid = bs.asSigned(h[""]   ,tag=f"SFX {i} aux {j} id")
+
         bs.asByte(h["priority_tiebreak"]    ,tag=f"SFX {i} priority tiebreaker + other bits")
         bs.asByte(h["virt_queue_behavior"]  ,tag=f"SFX {i} virtual queue behavior (1 == use virtual voice)")
         bs.asShort(h["max_sounds"]           ,tag=f"SFX {i} max sound limit (0 == no limit)")
@@ -798,9 +819,9 @@ class BNKParser(Parser):
           bs.asUnsigned(r["x_axis"]          ,tag=f"SFX {i} RTPC {j} x-axis game parameter id")
           bs.asByte(r["rtpc_type"]       ,val=0,tag=f"SFX {i} RTPC {j} type (0 == gameparameter)")
           bs.asByte(r["rtpc_accum"]      ,val=2,tag=f"SFX {i} RTPC {j} accum (2 == additive)")
-          bs.asByte(r["rtpc_param"]      ,val=0,tag=f"SFX {i} RTPC {j} parameter id (0 == volume)")
+          bs.asByte(r["rtpc_param"]      ,val=[0,2],tag=f"SFX {i} RTPC {j} parameter id (0 == volume, 2 == pitch)")
           bs.asSigned(r["rtpc_curve_id"]   ,tag=f"SFX {i} RTPC {j} curve id")
-          bs.asByte(r["rtpc_scaling"]    ,val=2,tag=f"SFX {i} RTPC {j} scaling (2 == decibels)")
+          bs.asByte(r["rtpc_scaling"]    ,val=[0,2],tag=f"SFX {i} RTPC {j} scaling (2 == decibels, 0 == none)")
           bs.asShort(r["num_rtpc_points"] ,tag=f"SFX {i} RTPC {j} num points")
           for k in range(int(r["num_rtpc_points"])):
             p           = r["rtpc_points"].next()
@@ -809,21 +830,33 @@ class BNKParser(Parser):
             bs.asSigned(p["interp"] , tag=f"SFX {i} RTPC {j} point {k} interpolation type (4 == linear)")
 
       elif h["type"] == 3: #action
-        bs.asSigned(h["subseclen"]       ,tag=f"Action {i} subsection length")
+        action_len = bs.asSigned(h["subseclen"]       ,tag=f"Action {i} subsection length")
         bs.asSigned(h["action_id"]       ,tag=f"Action {i} ID")
-        bs.asByte(h["action_scope"]    ,tag=f"Action {i} action scope (3 == game object, 2 = global)")
-        bs.asByte(h["action_type"]     ,val=[1,2,3,4],tag=f"Action {i} action type (1 == stop, 2 pause, 3 resume, 4 play)")
+        bs.asByte(h["action_scope"]    ,tag=f"Action {i} action scope (byte 1/2) (3 == game object, 2 = global)")
+        bs.asByte(h["action_type"]     ,val=[1,2,3,4,12,14,18],tag=f"Action {i} action type (byte 2/2) (1 == stop, 2 pause, 3 resume, 4 play, 18 setState, 14 SetLPF_O, 12 set bus volume)")
         bs.asSigned(h["action_sfx_id"]   ,tag=f"Action {i} game object (SFX) id")
         bs.asByte(h["action_bus_bits"] ,tag=f"Action {i} bus bits")
-        bs.asByte(h["action_props_1"]  ,val=0,tag=f"Action {i} props (needs to be 0)")
-        bs.asByte(h["action_props_2"]  ,val=0,tag=f"Action {i} props 2 (needs to be 0)")
+        action_props = bs.asByte(h["action_props_1"], tag=f"Action {i} props (usually 0)")
+        for j in range(action_props):
+            bs.asAny(h[""], 1, tag=f"Action {i} prop {j} type")
+            bs.asAny(h[""], 4, tag=f"Action {i} prop {j} value")
+
+        range_props = bs.asByte(h["action_props_2"]  ,val=0,tag=f"Action {i} range props (needs to be 0)")
+        for j in range(range_props):
+            bs.asAny(h[""], 1, tag=f"Action {i} range prop {j} type")
+            bs.asAny(h[""], 4, tag=f"Action {i} range prop {j} value")
+
         if int(h["action_type"]) == 4: #play
           bs.asByte(h["action_play_fade_curve"] ,tag=f"Action {i} play fade curve (4 == linear)")
           bs.asSigned(h["bank_id"] ,val=root["bankid"],tag=f"Action {i} bank id")
         elif int(h["action_type"]) == 1: #stop
           bs.asByte(h["action_stop_fade_curve"]     ,tag=f"Action {i} stop fade curve (4 == linear)")
           bs.asByte(h["action_stop_flags"]          ,val=6,tag=f"Action {i} stop bit flags (6 == expected)")
-          bs.asByte(h["action_stop_num_exceptions"] ,val=0,tag=f"Action {i} stop exception list size (needs to be 0)")
+          exceptions = bs.asByte(h["action_stop_num_exceptions"], tag=f"Action {i} stop exception list size (usually 0)")
+          for j in range(exceptions):
+            bs.asSigned(h[""], tag=f"Action {i} exception {j} id")
+            bs.asByte(h[""], tag=f"Action {i} exception {j} is bus")
+
         elif int(h["action_type"]) in [2,3]: #pause / resume
           resume = int(h["action_type"]) == 3
           flags = 6 if resume else 7
@@ -831,6 +864,19 @@ class BNKParser(Parser):
           bs.asByte(h["action_pause_fade_curve"]     ,tag=f"Action {i} {name} fade curve (4 == linear)")
           bs.asByte(h["action_pause_flags"]          ,val=[6,7],tag=f"Action {i} {name} bit flags (6 or 7 == expected)")
           bs.asByte(h["action_pause_num_exceptions"] ,val=0,tag=f"Action {i} {name} exception list size (needs to be 0)")
+        elif int(h["action_type"]) in [18]: #setState
+          bs.asSigned(h["action_state_group_id"], tag=f"Action {i} state group id")
+          bs.asSigned(h["action_state_target_id"], tag=f"Action {i} state target id")
+        elif int(h["action_type"]) in [14, 12]: #SetLPF_O, set bus volume
+          bs.asByte(h["action_lpf_bits"] , tag=f"Action {i} LPF bit vector")
+          bs.asByte(h["action_lpf_value_meaning"] , tag=f"Action {i} LPF value meaning")
+          bs.asFloat(h["action_lpf_random_base"] , tag=f"Action {i} LPF randomizer base")
+          bs.asFloat(h["action_lpf_random_min"] , tag=f"Action {i} LPF randomizer min")
+          bs.asFloat(h["action_lpf_random_max"] , tag=f"Action {i} LPF randomizer max")
+          exceptions = bs.asByte(h["action_stop_num_exceptions"], tag=f"Action {i} LPF exception list size (usually 0)")
+          for j in range(exceptions):
+            bs.asSigned(h[""], tag=f"Action {i} LPF exception {j} id")
+            bs.asByte(h[""], tag=f"Action {i} LPF exception {j} is bus")
         else:
           raise Exception("don't know how to handle this event type")
 
@@ -841,6 +887,11 @@ class BNKParser(Parser):
         for j in range(int(h["num_events"])):
           e = h["events"].next()
           bs.asSigned(e,tag=f"Event {i} action {j} id")
+
+      else:
+        sslen = bs.asSigned(h["subseclen"]      ,tag=f"Generic {i} subsection length")
+        bs.asAny(h[""], sslen)
+        # raise Exception(f"""unhandled HIRC event {int(h["type"])}""")
 
     self._valid = not bs.failed
     return bs.iostream.getvalue()
@@ -941,7 +992,7 @@ class BNKParser(Parser):
       # + (total size of rtpcs)
       #     (each rtpc is 15 + 12*num_points bytes)
     h["sfx_id"]               = sfx_id
-    h["plugin_id"]            = 262145 if isOgg else 65537 #always 65537
+    h["plugin_id"]            = 262145 if isOgg else 65537
     h["external_state"]       = 0 # 0 == embedded
     h["wem_file_id"]          = int(wfi["wemid"])
     h["wem_file_num_bytes"]   = int(wfi["wemlen"])
