@@ -26,6 +26,9 @@ SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the
 
 # Import necessary modules
 import sys, os, struct, io, wave, csv, argparse
+# Only needed for reading ogg files
+import pyaudio
+from soundfile import SoundFile
 
 # Install pyaudio and and uncomment below line to use playWAVData()
 #   (tested with Python 3.9, may not work with Python 3.10 and up)
@@ -200,7 +203,7 @@ def findWavsInDirectory(path,recursive=False):
     p = os.path.join(path,f)
     if os.path.isdir(p) and recursive:
       wavs_to_parse.extend(findWavsInDirectory(p,True))
-    if not (p.endswith(".wav") and isWaveFile(p)):
+    if not ((p.endswith(".wav") and isWaveFile(p)) or p.endswith(".ogg")):
       continue
     wavs_to_parse.append(p)
   return wavs_to_parse
@@ -255,6 +258,10 @@ class Ref(object):
 
   def __eq__(self, other):
     return self.val == other
+
+  #check if internal container contains item without setting it
+  def checkKey(self, key):
+    return self.val.get(key, None) is not None
 
   def next(self):
     if self.val is None:
@@ -379,7 +386,7 @@ class Decoder(object):
     elif (x == val) or (isinstance(val,list) and x in val):
       outcome = "good"
     else:
-      raise Exception(f"required value not matched: {col.CRT}{x} != {val}{col.BLN}")
+      raise Exception(f"expected to read {col.CRT}{val}{col.BLN}, actually read {col.CRT}{x}{col.BLN}")
       outcome = "bad"
       self.failed = True
     self.printmode(x,outcome,tag)
@@ -436,11 +443,31 @@ class Decoder(object):
     self.bytes_read += self.iostream.write(data)
     return data
 
-  def peek(self,n):
-    orig = self.iostream.tell()
-    x = self.iostream.read(n)
-    self.iostream.seek(orig)
-    return x
+  def speculate(self,ref,*,val,tag):
+    n = len(val)
+    if self.iomode == "read":
+      orig = self.iostream.tell()
+      x = self.iostream.read(n)
+      if x == val:
+        self.bytes_read += n
+        ref.val = x
+        self.printmode(x,"good",tag)
+        return True
+      else:
+        self.iostream.seek(orig)
+        return False
+    else:
+      try:
+        x = ref.val
+        if x is None:
+          del ref.val
+          return False
+        else:
+          self.bytes_read += self.iostream.write(x)
+          self.printmode(x,"good",tag)
+          return True
+      except AttributeError:
+        return False
 
 # Generic Parser class
 class Parser(object):
@@ -504,7 +531,7 @@ class WEMParser(Parser):
 
     bs.asShort(root[""],val=0, tag="????? always 0")
     # cc = bs.asShort([-2,-1,2], tag="compression code, always 2, -1, or -2 (flat bitrate / no compression)")
-    cc = bs.asShort(root["compression_code"],val=[-2,-1], tag="compression code, always -2 for flat bitrate / no compression, -1 = idk")
+    cc = bs.asShort(root["compression_code"],val=[-2,-1, 2], tag="compression code, always -2 for flat bitrate / no compression, -1 = ogg compression?, 2 = wav compression?")
 
     bs.asShort(root["channels"],val=[1,2], tag="number of audio channels (1-2)")
     # bs.asSigned(root["sample_rate"],val=[36000,44100,48000], tag="samples / second")
@@ -513,30 +540,55 @@ class WEMParser(Parser):
 
     # dcsm = bs.asShort([0,2,4,36,72], tag="block align")
     # dcsm = bs.asShort(root["block_align"],val=[2,4], tag="block align? (2 or 4 for our purposes)")
-    dcsm = bs.asShort(root["block_align"], tag="block align? (2 or 4 for our purposes)")
+    blockalignbytes = bs.asShort(root["block_align"], tag="@@@block align? (2 or 4 for our purposes, 36 and 72 also seen)")
     if cc == -2: # no compression
       sample_width = int(root["avg_byte_rate"]) / int(root["sample_rate"]) / int(root["channels"]) * 8
       # bs.asShort(root["sample_width"],val=sample_width, tag="bits per sample")
       bs.asShort(root["sample_width"],tag="bits per sample")
-    else:
+    elif cc == -1: # unknown
       bs.asShort(root["sample_width"],tag="bits per sample")
+    elif cc == 2: # ogg???
+      bs.asShort(root["sample_width"],tag="bits per sample")
+    else:
+      raise Exception("u messed up")
+      pass # o.o
 
     # bs.asSigned([6,48], tag="extra byte count? always 6 or 48")
-    bs.asSigned(root["extra_bytes"],val=6, tag="extra byte count? always 6 for our purposes")
+    extra_bytes = bs.asSigned(root["extra_bytes"],val=[6,48], tag="@@@extra byte count? always 6 for our purposes (maybe 48 for oggs?)")
     bs.asSigned(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
 
-    bs.asConst(root["junk_header"],val=b"JUNK",tag="junk chunk")
-    bs.asSigned(root[""],val=4, tag="????? always 4?")
-    bs.asSigned(root[""],val=0, tag="????? always 0?")
+    if extra_bytes == 48:
+        bs.asAny(root[""], 42, tag="42 unknown bytes")
 
-    bs.asConst(root["data_header"],val=b"data",tag="data chunk")
-    bs.asSigned(root["data_chunk_size"], tag="data chunk size") #can't compute size if nested
+    found_akd  = False
+    found_junk = False
+    while True:
+      # optional akd header
+      if (not found_akd) and bs.speculate(root["akd_header"], val=b"akd ",tag="akd chunk"):
+        found_akd = True
+        akd_size = bs.asSigned(root["akd_size"],tag="@@@akd chunk length")
+        bs.asAny(root[""], akd_size, tag=f"{akd_size} unknown bytes?")
 
-    bs.asAny(root["wav_data"],int(root["data_chunk_size"]),tag="WAV data")
+      # optional JUNK header
+      elif (not found_junk) and bs.speculate(root["junk_header"], val=b"JUNK",tag="junk chunk"):
+        found_junk = True
+        junk_size = bs.asSigned(root["junk_size"], tag="junk length")
+        bs.asAny(root["junk_data"], junk_size, tag=f"{junk_size} junk bytes")
+
+      # mandatory data header
+      elif bs.speculate(root["data_header"], val=b"data",tag="data chunk"):
+        data_size = bs.asSigned(root["data_chunk_size"], tag="data chunk size") #can't compute size if nested
+        bs.asAny(root["wav_data"],data_size,tag="WAV data")
+        break
+
+      else:
+        for i in range(64):
+          bs.asAny(root[""], 1, tag="???")
+          break
 
     return bs.iostream.getvalue()
 
-  def createMinimal(self):
+  def createMinimal(self, isOgg):
     root                     = self.root
     root["wem_header"]       = b"RIFF"
     root["wem_length"]       = None
@@ -553,15 +605,43 @@ class WEMParser(Parser):
     root["extra_bytes"]      = 6
     root["valid_bits"]       = 12546
     root["junk_header"]      = b"JUNK"
-    root[""]                 = 4
-    root[""]                 = 0
+    root["junk_size"]        = 4
+    root["junk_data"]        = b'\0\0\0\0'
     root["data_header"]      = b"data"
     root["data_chunk_size"]  = None
     root["wav_data"]         = None
     return self
 
+  def loadFromOggFile(self, file):
+    self.createMinimal(isOgg = True)
+    root = self.root
+
+    wf        = SoundFile(file, 'r') # open any other audio file
+    rate      = wf.samplerate
+    total     = wf.frames
+    channels  = wf.channels
+    sampwidth = 2 #UNKOWNN wf.get_sample_size()
+
+    wavdata = wf.read(dtype="int32")
+    print(f"ogg data: rate: {rate}, total: {total}, channels {channels}, width: {sampwidth}, data: {len(wavdata)} frames")
+
+    root["channels"]        = 2 # 2 #hack: all sound must be stereo
+    root["sample_width"]    = sampwidth*8
+    root["sample_rate"]     = channels*rate//2 #hack: halve sample rate for mono files to compensate
+
+    # vprint(f"Data: rate={rate}, channels={channels}, frames={total}, width={sampwidth}")
+
+    root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
+
+    root["data_chunk_size"] = len(wavdata) * 4#8
+    root["wav_data"]        = wavdata
+
+    root["wem_length"]      = root["data_chunk_size"] + 56
+
+    return self
+
   def loadFromWavFile(self,file):
-    self.createMinimal()
+    self.createMinimal(isOgg = False)
     root = self.root
 
     wf        = wave.open(file, 'rb')
@@ -619,13 +699,15 @@ class BNKParser(Parser):
     bs = decoder
 
     bs.asConst(root["bnk_head"] ,val=b'BKHD',tag="bkhd header")
-    bs.asSigned(root["seclen"]  ,val=24,tag="section length")
+    bs.asSigned(root["seclen"]  ,val=[24,28],tag="section length")
     bs.asSigned(root["version"]  ,tag="bank version")
     bs.asSigned(root["bankid"]   ,tag="bank id")
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="?????")
-    bs.asSigned(root[""]         ,tag="?????")
+    bs.asSigned(root[""]         ,tag="padding")
+    if root["seclen"] == 28:
+      bs.asSigned(root[""]         ,tag="extra padding")
 
     bs.asConst(root["didx_head"],val=b'DIDX',tag="didx header")
     bs.asSigned(root["didx_seclen"],tag="section length")
@@ -665,7 +747,7 @@ class BNKParser(Parser):
       if h["type"] == 2: #sound effect
         bs.asSigned(h["subseclen"]      ,tag=f"SFX {i} subsection length")
         bs.asSigned(h["sfx_id"]         ,tag=f"SFX {i} ID")
-        bs.asSigned(h["plugin_id"]      ,val=65537,tag=f"SFX {i} PluginID (65537 = PCM)")
+        bs.asSigned(h["plugin_id"]      ,val=[65537,262145],tag=f"SFX {i} PluginID (65537 = PCM, 262145 = VORBIS)")
          # PAC_NOTE:  here
         bs.asByte(h["external_state"] ,val=0,tag=f"SFX {i} external state (should be 0 == embedded)")
         if h["external_state"] == 0:
@@ -849,7 +931,7 @@ class BNKParser(Parser):
     loop["num_loops"] = num_loops #number of loops (0 == infinite)
     h["subseclen"] += 5
 
-  def addHircSFX(self,sfx_id,wfi):
+  def addHircSFX(self,sfx_id,wfi,isOgg):
     h                         = Ref({})
     h["type"]                 = HIRC_TYPE_SFX
     h["subseclen"]            = 43 #minimum length of subsection
@@ -859,7 +941,7 @@ class BNKParser(Parser):
       # + (total size of rtpcs)
       #     (each rtpc is 15 + 12*num_points bytes)
     h["sfx_id"]               = sfx_id
-    h["plugin_id"]            = 65537 #always 65537
+    h["plugin_id"]            = 262145 if isOgg else 65537 #always 65537
     h["external_state"]       = 0 # 0 == embedded
     h["wem_file_id"]          = int(wfi["wemid"])
     h["wem_file_num_bytes"]   = int(wfi["wemlen"])
@@ -947,7 +1029,7 @@ class BNKParser(Parser):
     h["subseclen"]  += 4
     h["events"].append(action_id)
 
-  def embedFromWav(self,wavfile):
+  def embedFromWav(self, wavfile, isOgg):
     base_fname   = os.path.splitext(os.path.basename(wavfile))[0]
     self.embedded_files.append(base_fname)
     sound_params = None
@@ -984,7 +1066,10 @@ class BNKParser(Parser):
     vprint(f"      >> event id for stopping all '{base_fname+'_stop_all'}' -> {stop_all_event_id}")
 
     # Load the wavfile as a WEM
-    wp = WEMParser().loadFromWavFile(wavfile)
+    if isOgg:
+      wp = WEMParser().loadFromOggFile(wavfile)
+    else:
+      wp = WEMParser().loadFromWavFile(wavfile)
 
     # Create the wem info header
     root["didx_seclen"]  += 12
@@ -1000,7 +1085,7 @@ class BNKParser(Parser):
     root["wemfiledata"].append(wp.root.val)
 
     # Create the hirc SFX data
-    sfx = self.addHircSFX(sfx_id,wfi)
+    sfx = self.addHircSFX(sfx_id,wfi,isOgg=isOgg)
     self.addDefaultVolumeParamToSFX(sfx,volume=sound_params.get("volume",1.0))
     self.addDefaultLoopParamToSFX(sfx,num_loops=sound_params.get("loops",1))
     self.addDefaultVolumeRTPCToSFX(sfx)
@@ -1100,7 +1185,7 @@ def main():
 
   # build list of wav files to parse
   vprint(f">> {col.CYN+'recursively '+col.BLN if args.recursive else ''}scanning {col.GRN}{args.input_path}{col.BLN} for wave files")
-  wavs_to_parse = findWavsInDirectory(args.input_path,recursive=args.recursive)
+  wavs_to_parse = findWavsInDirectory(args.input_path, recursive=args.recursive)
 
   # Generate a bank id from the file name
   base_bnk_name = os.path.splitext(os.path.basename(args.output_bank_name))[0]
@@ -1117,7 +1202,7 @@ def main():
   vprint(f"  >> embedding {len(wavs_to_parse)} .wav files into sound bank")
   for w in wavs_to_parse:
     vprint(f"    >> embedding {col.GRN}{w}{col.BLN} into sound bank")
-    bp.embedFromWav(w)
+    bp.embedFromWav(w, isOgg = w.endswith(".ogg"))
     if args.create_wems:
       convertWavToWem(w)
 
