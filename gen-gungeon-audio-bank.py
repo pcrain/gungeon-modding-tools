@@ -10,6 +10,45 @@
 #  - In dumped SFX.bnk.xml, Actor Mixer 189241348 references all music and probably controls volume (<fld ty="sid" na="ulID" va="189241348"/>)
 #     - 3649037401 = STOP_MUS_ALL
 #     - 1075162602 = Play_MUS_Boss_Theme_Beholster
+#  - Extracting OGG encoded files (like the Boss theme):
+#     - Download and build ww2ogg https://github.com/hcs64/ww2ogg
+#     - Extract the WEM file using this script, then run ./ww2ogg beholster.wem -o beholster.bin.ogg --mod-packets --pcb packed_codebooks_aoTuV_603.bin
+
+'''
+    354   : { Play_MUS_Boss_Theme_Beholster data
+      extra_bytes          : 48
+      wem_header           : b'RIFF'
+      wem_length           : 1512170
+      wem_wave             : b'WAVE'
+      fmt_header           : b'fmt '
+      fmt_size             : 66
+      [auto-1]             : 0
+      compression_code     : -1
+      channels             : 2
+      sample_rate          : 44100
+      avg_byte_rate        : 10458
+      block_align          : 0
+      sample_width         : 0
+      valid_bits           : 12546
+      [auto-2]             : [array of 42 bytes]
+      akd_header           : None
+      junk_header          : None
+      data_header          : b'data'
+      data_chunk_size      : 1512084
+      wav_data             : [array of 1512084 bytes]
+    }
+
+    ww2ogg output:
+      Input: beholster.wem
+        RIFF WAVE 2 channels 44100 Hz 83664 bps
+        6350400 samples
+        - 2 byte packet headers, no granule
+        - stripped setup header
+        - external codebooks (packed_codebooks_aoTuV_603.bin)
+        - modified Vorbis packets
+        Output: beholster.bin.ogg
+        Done!
+'''
 
 #Todo:
 #  - figure out pausing music on pause screen
@@ -23,11 +62,14 @@
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
 
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
+ENABLE_OGG = True # not working for now
+ENABLE_OGG = False # not working for now
 
 # Import necessary modules
-import sys, os, struct, io, wave, csv, argparse
+import sys, os, struct, io, wave, csv, argparse, time
 # Only needed for reading ogg files
 import pyaudio
+import numpy as np
 from soundfile import SoundFile
 
 # Install pyaudio and and uncomment below line to use playWAVData()
@@ -125,6 +167,17 @@ def playWEMData(wp):
     wp["sample_rate"].val,
     wp["sample_width"].val)
 
+#Save raw WAV Data
+def saveWAVData(fname,data,channels,rate,samplebits):
+  print(samplebits)
+  width = samplebits#//8
+  with wave.open(fname, "wb") as fout:
+      fout.setnchannels(channels)
+      fout.setsampwidth(4 if width == 0 else width) # number of bytes
+      fout.setframerate(rate)
+      fout.writeframes(data)
+      # fout.writeframesraw(data)
+
 #Play raw WAV data using PyAudio
 def playWAVData(data,channels,rate,samplebits):
   if not "pyaudio" in sys.modules:
@@ -203,8 +256,7 @@ def findWavsInDirectory(path,recursive=False):
     p = os.path.join(path,f)
     if os.path.isdir(p) and recursive:
       wavs_to_parse.extend(findWavsInDirectory(p,True))
-    # if not ((p.endswith(".wav") and isWaveFile(p)) or p.endswith(".ogg")):
-    if not ((p.endswith(".wav") and isWaveFile(p))):
+    if not ((p.endswith(".wav") and isWaveFile(p)) or (ENABLE_OGG and p.endswith(".ogg"))):
       continue
     wavs_to_parse.append(p)
   return wavs_to_parse
@@ -513,6 +565,12 @@ class Parser(object):
     if root.val is None:
       root.val = {}
 
+_uniq = 0
+def getUniqueId():
+  global _uniq
+  _uniq += 1
+  return f"{_uniq}"
+
 # Parser for Gungeon WEM Data
 class WEMParser(Parser):
   def __init__(self):
@@ -521,13 +579,15 @@ class WEMParser(Parser):
   def parse(self,decoder,root,mode):
     super(WEMParser, self).parse(decoder,root,mode)
 
+
     bs = decoder
+    start_bytes = bs.bytes_read
     bs.asConst(root["wem_header"],  val=b"RIFF",  tag="'RIFF'")
     bs.asSigned(root["wem_length"], tag="bytes remaining")
     bs.asConst(root["wem_wave"],    val=b"WAVE",  tag="'WAVE'")
 
     bs.asConst(root["fmt_header"], val=b"fmt ",tag="format chunk")
-    cc = bs.asShort(root["fmt_type"], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
+    fmt_size = bs.asShort(root["fmt_size"], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
     # cc = bs.asShort(root[""], val=24, tag="????? always 24 for our purposes") # 24 =
 
     bs.asShort(root[""],val=0, tag="????? always 0")
@@ -541,7 +601,7 @@ class WEMParser(Parser):
 
     # dcsm = bs.asShort([0,2,4,36,72], tag="block align")
     # dcsm = bs.asShort(root["block_align"],val=[2,4], tag="block align? (2 or 4 for our purposes)")
-    blockalignbytes = bs.asShort(root["block_align"], tag="@@@block align? (2 or 4 for our purposes, 36 and 72 also seen)")
+    blockalignbytes = bs.asShort(root["block_align"], tag="block align? (2 or 4 for our purposes, 36 and 72 also seen)")
     if cc == -2: # no compression
       sample_width = int(root["avg_byte_rate"]) / int(root["sample_rate"]) / int(root["channels"]) * 8
       # bs.asShort(root["sample_width"],val=sample_width, tag="bits per sample")
@@ -555,11 +615,25 @@ class WEMParser(Parser):
       pass # o.o
 
     # bs.asSigned([6,48], tag="extra byte count? always 6 or 48")
-    extra_bytes = bs.asSigned(root["extra_bytes"],val=[6,48], tag="@@@extra byte count? always 6 for our purposes (maybe 48 for oggs?)")
-    bs.asSigned(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
+    extra_bytes = bs.asSigned(root["extra_bytes"],val=fmt_size-18, tag="extra byte count == fmt_size - 18 (always 6 for WAVs and 48 for oggs)")
+    true_extra_bytes = extra_bytes - 6 # discount the extra_bytes field itself and the valid_bits field
 
-    if extra_bytes == 48:
-        bs.asAny(root[""], 42, tag="42 unknown bytes")
+    if true_extra_bytes == 42: #extra ogg data
+      #42
+      # bs.asSigned(root["ogg_extra_unk"], tag="2 unknown extra ogg bytes")
+      #40
+      bs.asSigned(root["ogg_subtype"], tag="ogg subtype")
+      #36 vorb bytes
+      bs.asSigned(root["ogg_sample_count"], tag="ogg sample count")
+      #32
+      bs.asUnsigned(root["ogg_mod_signal"], tag="ogg mod signal")
+      #28
+      print(bs.asAny(root["ogg_bytes"], 34, tag="28 unknown ogg bytes"))
+    elif true_extra_bytes in [2,0]:
+      bs.asSigned(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
+      # bs.asShort(root["valid_bits"],val=[12546,16641], tag="valid bits per sample? always 12546 or 16641")
+    else:
+      raise Exception(f"unknown extra bytes {extra_bytes}")
 
     found_akd  = False
     found_junk = False
@@ -579,7 +653,21 @@ class WEMParser(Parser):
       # mandatory data header
       elif bs.speculate(root["data_header"], val=b"data",tag="data chunk"):
         data_size = bs.asSigned(root["data_chunk_size"], tag="data chunk size") #can't compute size if nested
-        bs.asAny(root["wav_data"],data_size,tag="WAV data")
+        wavdata = bs.asAny(root["wav_data"],data_size,tag="WAV data")
+        if data_size == 1512084:# and data_size == 91152:# or data_size == 70884:# or data_size == 1512084:
+          print("FOUND IT")
+          # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, 1, int(root["sample_rate"]), int(root["sample_width"]))
+          # saveWAVData(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}.wav", wavdata, int(root["channels"]), int(root["sample_rate"]), int(root["sample_width"]))
+          # playWAVData(wavdata, int(root["channels"]), int(root["sample_rate"]), 8)
+          # A1 = np.frombuffer(wavdata, dtype=np.int8)
+          # A2 = np.pad(A1, (2, 2 + (4 - (len(A1) % 4))))
+          # A = np.frombuffer(A2, dtype=np.int16)
+          # b = A.byteswap()
+          # if cc == -2:
+          # playWAVData(b, int(root["channels"]), int(root["sample_rate"]), 8)
+          # with open(f"/home/pretzel/downloads/gungeon-sounds/{getUniqueId()}", 'wb') as fout:
+          #   fout.write(wavdata)
+          time.sleep(100000)
         break
 
       else:
@@ -587,7 +675,14 @@ class WEMParser(Parser):
           bs.asAny(root[""], 1, tag="???")
           break
 
-    return bs.iostream.getvalue()
+    wemdata = bs.iostream.getvalue()
+    if data_size == 1512084:
+      print(f"FOUND: read {bs.bytes_read - start_bytes}")
+
+      with open(f"/home/pretzel/downloads/gungeon-sounds/beholster.wem", 'wb') as fout:
+        fout.write(wemdata[start_bytes:bs.bytes_read])
+      time.sleep(100)
+    return wemdata
 
   def createMinimal(self, isOgg):
     root                     = self.root
@@ -595,16 +690,23 @@ class WEMParser(Parser):
     root["wem_length"]       = None
     root["wem_wave"]         = b"WAVE"
     root["fmt_header"]       = b"fmt "
-    root["fmt_type"]         = 66 if isOgg else 24
+    root["fmt_size"]         = 66 if isOgg else 24
     root[""]                 = 0
     root["compression_code"] = -1 if isOgg else -2      # no compression
     root["channels"]         = None
     root["sample_rate"]      = None
     root["avg_byte_rate"]    = None
-    root["block_align"]      = 4
-    root["sample_width"]     = None
-    root["extra_bytes"]      = 6
-    root["valid_bits"]       = 12546
+    root["block_align"]      = 0 if isOgg else 4
+    root["sample_width"]     = 0 if isOgg else None
+    root["extra_bytes"]      = 48 if isOgg else 6
+    if isOgg:
+      # root["ogg_extra_unk"]    = 0 # need to edit?
+      root["ogg_subtype"]      = 0 # need to edit?
+      root["ogg_sample_count"] = None
+      root["ogg_mod_signal"]   = 0 # need to edit?
+      root["ogg_bytes"]      = b'0' * 28
+    else:
+      root["valid_bits"]       = 12546
     root["junk_header"]      = b"JUNK"
     root["junk_size"]        = 4
     root["junk_data"]        = b'\0\0\0\0'
@@ -614,29 +716,28 @@ class WEMParser(Parser):
     return self
 
   def loadFromOggFile(self, file):
-    self.createMinimal(isOgg = True)
+    isOgg = True
+    self.createMinimal(isOgg = isOgg)
     root = self.root
 
     wf        = SoundFile(file, 'r') # open any other audio file
     rate      = wf.samplerate
     total     = wf.frames
     channels  = wf.channels
-    sampwidth = 2 #UNKOWNN wf.get_sample_size()
+    samples   = wf.frames
 
     with open(file, 'rb') as fin:
-      wavdata = fin.read()
+      wavdata = fin.read() #[58:] # skip first 58 bytes
     # wavdata = wf.read(dtype="int16")
     # wavdata = wf.read(dtype="int32")
     # wavdata = wf.read(dtype="float64")
-    print(f"ogg data: rate: {rate}, total: {total}, channels {channels}, width: {sampwidth}, data: {len(wavdata)} frames")
+    print(f"ogg data: rate: {rate}, total: {total}, channels {channels}, data: {len(wavdata)} frames")
 
-    root["channels"]        = 2 # 2 #hack: all sound must be stereo
-    root["sample_width"]    = sampwidth*8
-    root["sample_rate"]     = channels*rate//2 #hack: halve sample rate for mono files to compensate
+    root["channels"]        = channels # 2 #hack: all sound must be stereo
+    root["sample_rate"]     = rate #hack: halve sample rate for mono files to compensate
 
-    # vprint(f"Data: rate={rate}, channels={channels}, frames={total}, width={sampwidth}")
-
-    root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
+    root["avg_byte_rate"]   = 0 # don't know how to compute
+    root["ogg_sample_count"] = samples
 
     root["data_chunk_size"] = len(wavdata) #* 2#4#8
     root["wav_data"]        = wavdata
@@ -1002,7 +1103,7 @@ class BNKParser(Parser):
     h["num_fx"]               = 0
     h["override_attachments"] = 0
     h["bus_id"]               = GUNGEON_BUS_ID
-    h["parent_id"]            = 0
+    h["parent_id"]            = 0 # 90804066 for music???
     h["misc_flags"]           = 0
     h["num_params"]           = 0
     h["num_range_modifiers"]  = 0
