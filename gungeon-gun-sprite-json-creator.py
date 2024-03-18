@@ -124,12 +124,9 @@ class BetterListBox:
         # with dpg.child_window(height=self.height, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
         with dpg.child_window(autosize_y=False, height=100, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
           pass
+        dpg.bind_item_theme(self.custom_listbox, self.custom_listbox_theme)
 
         self.replace_items(items)
-        self.filter_items("2")
-
-        dpg.bind_item_theme(self.custom_listbox, self.custom_listbox_theme)
-        # dpg.configure_item(self.items[30], tracked=True, track_offset=0.5)
 
     def replace_items(self, items):
         self.items         = []
@@ -157,6 +154,13 @@ class BetterListBox:
         dpg.bind_item_theme(sender, self.button_selected_theme)
         # dpg.configure_item(sender, tracked=False, track_offset=0.5)
         dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
+
+    def scroll_to_specific_item(self, itemname):
+        truename = os.path.basename(itemname).replace(".json","")
+        for item in self.items:
+          if dpg.get_item_label(item) == truename:
+            self.scroll_and_invoke_callback(item)
+            break
 
     def change_item(self, delta):
       num_vis_items = len(self.visible_items)
@@ -790,6 +794,7 @@ def main(filename):
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
+  last_file = None
   if filename is None:
     filename = get_config("last_file") or None
     if not os.path.exists(filename):
@@ -798,6 +803,7 @@ def main(filename):
     load_gun_image(filename)
     if os.path.exists(jf := filename.replace(".png",".json")):
       load_json_from_file(jf)
+      last_file = jf
   else:
     open_import_dialog()
 
@@ -807,6 +813,12 @@ def main(filename):
   # Show the app
   dpg.show_viewport()
   # dpg.start_dearpygui()
+
+  # Render a single frame and scroll to our last opened file
+  if dpg.is_dearpygui_running():
+      dpg.render_dearpygui_frame()
+      if last_file is not None:
+        file_box.scroll_to_specific_item(last_file)
 
   # below replaces, start_dearpygui()
   while dpg.is_dearpygui_running():
