@@ -38,6 +38,7 @@ PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
 
 ENABLED_STRING    = " Enabled" #note the space
 DISABLED_STRING   = "Disabled"
+FILE_PICKER_TAG   = "file picker box"
 PREVIEW_IMAGE_TAG = "preview_image"
 HAND_IMAGE_TAG    = "hand_image"
 HAND_IMAGE_PATH   = os.path.join(os.path.dirname(os.path.realpath(__file__)), "hand_main.png")
@@ -75,6 +76,7 @@ filtered_file_list = []
 clipboard          = None
 clipboard_file     = None
 unsaved_changes    = False
+file_box           = None
 
 #Config globals
 jconf = {
@@ -84,6 +86,91 @@ jconf = {
   "show_hands"        : True,
   "last_file"         : None,
 }
+
+class BetterListBox:
+    custom_listbox_theme  = None
+    button_selected_theme = None
+    button_normal_theme   = None
+    custom_listbox        = None
+    callback              = None
+    items                 = None
+    visible_items         = None
+    width                 = None
+    height                = None
+    parent                = None
+
+    cur_index             = 0
+
+    def __init__(self, items: list, width: int = 250, height: int = 70, parent: int | str = None, callback: callable = None):
+        parent = parent or dpg.last_container()
+        self.callback = callback
+        self.width    = width
+        self.height   = height
+        self.parent   = parent
+
+        with dpg.theme() as self.custom_listbox_theme:
+            with dpg.theme_component(dpg.mvAll):
+                dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 0,0)
+                dpg.add_theme_style(dpg.mvStyleVar_ButtonTextAlign, 0, 0.5)
+
+        with dpg.theme() as self.button_selected_theme:
+            with dpg.theme_component(dpg.mvButton):
+                dpg.add_theme_color(dpg.mvThemeCol_Button, (0,119,200,153))
+
+        with dpg.theme() as self.button_normal_theme:
+            with dpg.theme_component(dpg.mvButton):
+                dpg.add_theme_color(dpg.mvThemeCol_Button, (51, 51, 55, 255))
+
+        # with dpg.child_window(height=self.height, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
+        with dpg.child_window(autosize_y=False, height=100, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
+          pass
+
+        self.replace_items(items)
+        self.filter_items("2")
+
+        dpg.bind_item_theme(self.custom_listbox, self.custom_listbox_theme)
+        # dpg.configure_item(self.items[30], tracked=True, track_offset=0.5)
+
+    def replace_items(self, items):
+        self.items         = []
+        for i,item in enumerate(items): #TODO: figure out how to nuke old items so we don't leak memory
+            newitem = dpg.add_button(parent=self.custom_listbox, label=item, width=-1, callback=self.scroll_and_invoke_callback)
+            self.items.append(newitem)
+        self.visible_items = range(len(self.items))
+
+    def filter_items(self, query):
+        self.visible_items = []
+        for i, item in enumerate(self.items):
+          show = (query in dpg.get_item_label(item))
+          dpg.configure_item(item, show=show)
+          if show:
+            self.visible_items.append(i)
+
+    def scroll_and_invoke_callback(self, sender):
+        if self.callback:
+            self.callback(dpg.get_item_parent(sender), dpg.get_item_label(sender))
+        for i,button in enumerate(dpg.get_item_children(dpg.get_item_parent(sender))[1]):
+            if button == sender:
+              self.cur_index = i
+            dpg.bind_item_theme(button, self.button_normal_theme)
+            # dpg.configure_item(button, tracked=False)
+        dpg.bind_item_theme(sender, self.button_selected_theme)
+        # dpg.configure_item(sender, tracked=False, track_offset=0.5)
+        dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
+
+    def change_item(self, delta):
+      num_vis_items = len(self.visible_items)
+      if num_vis_items == 0:
+        return # shouldn't do anything of nothing is visible
+
+      try:
+        vis_index = (num_vis_items + self.visible_items.index(self.cur_index) + delta) % num_vis_items
+      except ValueError:
+        vis_index = 0
+
+      self.cur_index = self.visible_items[vis_index]
+      new_item = self.items[self.cur_index]
+      self.scroll_and_invoke_callback(new_item)
 
 def get_config_path():
   if 'APPDATA' in os.environ:
@@ -478,8 +565,8 @@ def load_gun_image(filename):
   set_config("last_file", filename)
 
 def update_file_list(filelist):
-    dpg.configure_item("file picker box", items=filelist, default_value=current_file.replace(".png",""))
-    # dpg.configure_item("file picker box", items=filelist, default_value=current_file.replace(".png",""), tracked=True, track_offset=0.5)
+    # dpg.configure_item(FILE_PICKER_TAG, items=filelist, default_value=current_file.replace(".png",""))
+    file_box.replace_items(filelist)
 
 def load_json_from_dict(jdata):
   # Temporarily disable all previews
@@ -544,12 +631,13 @@ def open_import_dialog():
 
 def filter_files(_, query):
   global current_search, filtered_file_list, dir_file_list
-  if current_search in query:
-    base_list = filtered_file_list # slight optimization for not looking through whole file list
-  else:
-    base_list = dir_file_list
-  filtered_file_list = [f for f in base_list if query in f]
-  update_file_list(filtered_file_list)
+  # if current_search in query:
+  #   base_list = filtered_file_list # slight optimization for not looking through whole file list
+  # else:
+  #   base_list = dir_file_list
+  # filtered_file_list = [f for f in base_list if query in f]
+  # update_file_list(filtered_file_list)
+  file_box.filter_items(query)
   current_search = query
 
 def save_changes_from_shortcut():
@@ -573,22 +661,10 @@ def toggle_hands(switch, value):
   #   toggle_element(p.tag_base, override=False)
 
 def next_file(delta):
-  picker = "file picker box"
-  cur_item = dpg.get_value(picker)
-  all_items = dpg.get_item_configuration("file picker box")["items"]
-  index = all_items.index(cur_item)
-  new_index = index + delta
-  if new_index < 0:
-    new_index = len(all_items) - 1
-  elif new_index >= len(all_items) - 1:
-    new_index = 0
-  new_item = all_items[new_index]
-  dpg.configure_item(picker, default_value=new_item)
-  # dpg.configure_item(new_item, tracked=True, track_offset=0.5)
-  set_current_file_from_picker_box(None, all_items[new_index])
+  file_box.change_item(delta)
 
 def main(filename):
-  global orig_width, orig_height
+  global orig_width, orig_height, file_box
 
   # Make sure we actually have a valid filename passed (or None)
   if (filename is not None) and (not os.path.exists(filename)):
@@ -618,10 +694,11 @@ def main(filename):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
       # with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
-      with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget"):
+      with dpg.group(horizontal=False, width=300, height=wh - 40, tag="filewidget") as filewidgetgroup:
         dpg.add_input_text(width=256, hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box")
-        # dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
-        dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
+        # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
+        # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
+        file_box = BetterListBox(items=[], parent=filewidgetgroup, height=wh, width=100, callback=set_current_file_from_picker_box)
         pass
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
