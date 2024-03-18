@@ -137,11 +137,16 @@ class BetterListBox:
 
     def filter_items(self, query):
         self.visible_items = []
+        sel_is_visible = True
         for i, item in enumerate(self.items):
           show = (query in dpg.get_item_label(item))
           dpg.configure_item(item, show=show)
           if show:
             self.visible_items.append(i)
+          elif i == self.cur_index:
+            sel_is_visible = False
+        if (not sel_is_visible) and len(self.visible_items) > 0:
+          self.scroll_and_invoke_callback(self.items[self.visible_items[0]])
 
     def scroll_and_invoke_callback(self, sender):
         if self.callback:
