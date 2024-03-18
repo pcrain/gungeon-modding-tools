@@ -278,7 +278,7 @@ def revert_callback():
 
   clear_unsaved_changes()
   fullpath = os.path.join(current_dir, current_file)
-  load_new_image(fullpath)
+  load_gun_image(fullpath)
   jsonpath = fullpath.replace(".png",".json")
   if os.path.exists(jsonpath):
     load_json_from_file(jsonpath)
@@ -418,7 +418,8 @@ def generate_controls(p):
 
 def load_scaled_image(filename, image_tag):
   pil_image = Image.open(filename)
-  # pil_image = pil_image.convert(mode='P', palette=Image.Palette.ADAPTIVE)
+  if pil_image.mode != "RGBA":
+    pil_image = pil_image.convert(mode='RGBA')
   orig_width, orig_height = pil_image.size
   scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
   scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
@@ -430,7 +431,7 @@ def load_scaled_image(filename, image_tag):
     dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=image_tag)
   return (scaled_image, orig_width, orig_height)
 
-def load_new_image(filename):
+def load_gun_image(filename):
   global orig_width, orig_height, current_file, current_dir
 
   # Export our current image if we have unsaved changes and autosave is on
@@ -515,14 +516,14 @@ def set_current_file_from_import_dialog(sender, app_data):
   if not os.path.exists(f"{stem}.png"):
     return
 
-  load_new_image(f"{stem}.png")
+  load_gun_image(f"{stem}.png")
   if os.path.exists(f"{stem}.json"):
     load_json_from_file(f"{stem}.json")
 
 def set_current_file_from_picker_box(sender, app_data):
   fullpath = os.path.join(current_dir, app_data)
   if os.path.exists(f"{fullpath}.png"):
-    load_new_image(f"{fullpath}.png")
+    load_gun_image(f"{fullpath}.png")
     if os.path.exists(f"{fullpath}.json"):
       load_json_from_file(f"{fullpath}.json")
     clear_unsaved_changes()
@@ -660,7 +661,7 @@ def main(filename):
 
         # Set up the main drawing list
         with dpg.drawlist(width=1, height=1, tag="drawlist"):
-          pass # deferred until load_new_image()
+          pass # deferred until load_gun_image()
 
         # Set up a click handler for our drawing list
         with dpg.item_handler_registry(tag="drawlist click handler"):
@@ -695,7 +696,7 @@ def main(filename):
     if not os.path.exists(filename):
       filename = None
   if filename is not None:
-    load_new_image(filename)
+    load_gun_image(filename)
     if os.path.exists(jf := filename.replace(".png",".json")):
       load_json_from_file(jf)
   else:
