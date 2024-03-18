@@ -707,7 +707,14 @@ def main(filename):
 
   # Show the app
   dpg.show_viewport()
-  dpg.start_dearpygui()
+  # dpg.start_dearpygui()
+
+  # below replaces, start_dearpygui()
+  while dpg.is_dearpygui_running():
+      # insert here any code you would like to run in the render loop
+      # you can manually stop by using stop_dearpygui()
+      # print("this will run every frame")
+      dpg.render_dearpygui_frame()
 
   # Before we exit, export our current image if we have unsaved changes and autosave is on
   if dpg.does_item_exist("save modal") and get_config("autosave"):
