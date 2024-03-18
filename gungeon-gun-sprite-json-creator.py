@@ -1,11 +1,12 @@
-#!/usr/bin/python
+#!/usr/bin/python3.11
 #Gungeon JSON visualizer and creator
 
 #  Manually install missing packages with:
-#    pip install --user --break-system-packages dearpygui numpy pillow
+#    pip install --user --break-system-packages dearpygui numpy pillow screeninfo
 
 # Todo:
 #   - figure out previewing indexed color images
+#   - hand previews
 
 import os, sys, subprocess, shlex, json, array, importlib
 from collections import namedtuple
@@ -37,6 +38,11 @@ PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
 
 ENABLED_STRING    = " Enabled" #note the space
 DISABLED_STRING   = "Disabled"
+PREVIEW_IMAGE_TAG = "preview_image"
+HAND_IMAGE_TAG    = "hand_image"
+HAND_IMAGE_PATH   = os.path.join(os.path.dirname(os.path.realpath(__file__)), "hand_main.png")
+OFF_IMAGE_TAG     = "hand_off"
+OFF_IMAGE_PATH    = os.path.join(os.path.dirname(os.path.realpath(__file__)), "hand_off.png")
 ENABLED_COLOR     = (64, 128, 64, 255)
 DISABLED_COLOR    = (64, 0, 0, 255)
 SHORTCUT_COLOR    = (192, 255, 255, 255)
@@ -75,6 +81,7 @@ jconf = {
   "no_warn_overwrite" : False,
   "no_warn_switch"    : False,
   "autosave"          : False,
+  "show_hands"        : True,
   "last_file"         : None,
 }
 
@@ -296,13 +303,42 @@ def toJsonCoordinates(x,y):
   jsony = (canvas_height - (y - DRAWLIST_PAD)) / (PREVIEW_SCALE * PIXELS_PER_TILE) # we have an inverted y axis
   return jsonx, jsony
 
+def redraw_attach_point(p):
+  # Verify we're actually enabled
+  if not attach_point_enabled(p):
+    return
+
+  # Delete and redraw the hand drawing layer
+  layer = f"{p.tag_base} layer"
+  if dpg.does_alias_exist(layer):
+    dpg.delete_item(layer)
+  dpg.push_container_stack("drawlist")
+  dpg.add_draw_layer(tag=layer)
+  dpg.pop_container_stack()
+
+  # Redraw the hand at the designated position
+  dpg.push_container_stack(layer)
+  center = _attach_point_coords[p.name]
+  if get_config("show_hands") and ("hand" in p.tag_base):
+    # offset = center+PREVIEW_SCALE*(DRAWLIST_PAD,DRAWLIST_PAD)
+    offset = (center[0] - 2*PREVIEW_SCALE, center[1] - 2*PREVIEW_SCALE)
+    # dpg.draw_image(HAND_IMAGE_TAG, center=_attach_point_coords[p.name], tag=f"{p.tag_base} hand")
+    # dpg.draw_image(HAND_IMAGE_TAG, offset, offset + (4*PREVIEW_SCALE, 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
+    dpg.draw_image(HAND_IMAGE_TAG if "main" in p.tag_base else OFF_IMAGE_TAG, offset, (offset[0] + 4*PREVIEW_SCALE, offset[1] + 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
+  else:
+    dpg.draw_circle(center=center, radius=PREVIEW_SCALE, color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
+  dpg.pop_container_stack()
+
+def attach_point_enabled(p):
+  return dpg.get_item_label(f"{p.tag_base} enabled") != DISABLED_STRING
+
 def move_hand_preview(x, y, p=None):
   global _attach_point_coords
 
   # Get the active attach point from the environment if not specified
   if p is None:
     p = _active_attach_point
-  if dpg.get_item_label(f"{p.tag_base} enabled") == DISABLED_STRING:
+  if not attach_point_enabled(p):
     # print(f"{p.tag_base} is disabled")
     return # return if our element is disabled
 
@@ -318,19 +354,8 @@ def move_hand_preview(x, y, p=None):
   dpg.set_value(f"{p.tag_base} x box", realx)
   dpg.set_value(f"{p.tag_base} y box", realy)
 
-  # Delete and redraw the hand drawing layer
-  layer = f"{p.tag_base} layer"
-  if dpg.does_alias_exist(layer):
-    dpg.delete_item(layer)
-  dpg.push_container_stack("drawlist")
-  dpg.add_draw_layer(tag=layer)
-  dpg.pop_container_stack()
-
-  # Redraw the hand at the designated position
-  dpg.push_container_stack(layer)
-  dpg.draw_circle(center=_attach_point_coords[p.name], radius=8, color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
-  dpg.pop_container_stack()
-
+  # Redraw the attach point
+  redraw_attach_point(p)
 
 def on_plot_clicked(sender, app_data):
   if dpg.is_key_down(dpg.mvKey_Shift):
@@ -391,6 +416,20 @@ def generate_controls(p):
     dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
     dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
 
+def load_scaled_image(filename, image_tag):
+  pil_image = Image.open(filename)
+  # pil_image = pil_image.convert(mode='P', palette=Image.Palette.ADAPTIVE)
+  orig_width, orig_height = pil_image.size
+  scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+  scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
+  dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
+  with dpg.texture_registry():
+    if dpg.does_alias_exist(image_tag):
+      dpg.remove_alias(image_tag)
+      dpg.delete_item(image_tag)
+    dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=image_tag)
+  return (scaled_image, orig_width, orig_height)
+
 def load_new_image(filename):
   global orig_width, orig_height, current_file, current_dir
 
@@ -399,18 +438,8 @@ def load_new_image(filename):
     export_callback()
 
   # Load and resize the image internally since pygui doesn't seem to support nearest neighbor scaling
-  pil_image = Image.open(filename)
-  # pil_image = pil_image.convert(mode='P', palette=Image.Palette.ADAPTIVE)
-  orig_width, orig_height = pil_image.size
+  pil_image, orig_width, orig_height = load_scaled_image(filename, PREVIEW_IMAGE_TAG)
   scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
-  scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
-  dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
-  with dpg.texture_registry():
-    image_tag = "image_id"
-    if dpg.does_alias_exist(image_tag):
-      dpg.remove_alias(image_tag)
-      dpg.delete_item(image_tag)
-    dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=image_tag)
 
   # Set our current file as appropriate
   old_dir      = current_dir
@@ -434,7 +463,7 @@ def load_new_image(filename):
     if DRAW_INNER_BORDER:
       dpg.draw_rectangle((DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width,DRAWLIST_PAD+scaled_height),color=THIN_WHITE)
     #Draw sprite itself
-    dpg.draw_image("image_id", (DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width, DRAWLIST_PAD+scaled_height))
+    dpg.draw_image(PREVIEW_IMAGE_TAG, (DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width, DRAWLIST_PAD+scaled_height))
   dpg.pop_container_stack()
 
   if changed_dir:
@@ -532,6 +561,15 @@ def save_changes_from_shortcut():
     else:
       export_callback()
 
+def toggle_hands(switch, value):
+  set_config("show_hands", value)
+  am = _attach_point_dict[" Main Hand"]
+  ao = _attach_point_dict["  Off Hand"]
+  redraw_attach_point(am)
+  redraw_attach_point(ao)
+  # for p in _attach_points:
+  #   toggle_element(p.tag_base, override=False)
+
 def main(filename):
   global orig_width, orig_height
 
@@ -540,7 +578,7 @@ def main(filename):
     print(f"{filename} doesn't exist!")
     return
 
-  # Get monitor info
+  # Get main monitor info
   for m in screeninfo.get_monitors():
     mw, mh = m.width, m.height
     break
@@ -553,6 +591,10 @@ def main(filename):
   dpg.create_context()
   dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
   dpg.setup_dearpygui()
+
+  # Load necessary assets
+  load_scaled_image(HAND_IMAGE_PATH, HAND_IMAGE_TAG)
+  load_scaled_image(OFF_IMAGE_PATH, OFF_IMAGE_TAG)
 
   # Set up the main window
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
@@ -583,6 +625,7 @@ def main(filename):
               # no easy way to get this to work with listpicker, so hidden by default
               dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
               dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
+              dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
               # dpg.add_separator()
 
               # Import button
