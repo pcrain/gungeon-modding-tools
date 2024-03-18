@@ -8,7 +8,7 @@
 #   - figure out previewing indexed color images
 #   - hand previews
 
-import os, sys, subprocess, shlex, json, array, importlib
+import os, sys, subprocess, shlex, json, array, importlib, re
 from collections import namedtuple
 
 # Install missing packages as necessary
@@ -77,6 +77,8 @@ clipboard          = None
 clipboard_file     = None
 unsaved_changes    = False
 file_box           = None
+animation_on       = False
+animation_speed    = 10
 
 #Config globals
 jconf = {
@@ -139,7 +141,7 @@ class BetterListBox:
         self.visible_items = []
         sel_is_visible = True
         for i, item in enumerate(self.items):
-          show = (query in dpg.get_item_label(item))
+          show = (dpg.get_item_label(item).startswith(query))
           dpg.configure_item(item, show=show)
           if show:
             self.visible_items.append(i)
@@ -180,6 +182,27 @@ class BetterListBox:
       self.cur_index = self.visible_items[vis_index]
       new_item = self.items[self.cur_index]
       self.scroll_and_invoke_callback(new_item)
+
+    name_rx = re.compile(r"(.*)_[0-9]+")
+    def get_animation_root(self, name):
+      return self.name_rx.sub(r"\1",name)
+
+    root      = None # the root name of our current animation name
+    frames    = None # indices of the frames corresponding to our current animation
+    cur_frame = 0    # the current frame of our animation playing
+    def advance_frame(self):
+      cur_root = self.get_animation_root(dpg.get_item_label(self.items[self.cur_index]))
+      # Figure out the name of our current animation if necessary
+      if self.root != cur_root:
+        self.root = cur_root
+        self.frames = []
+        self.cur_frame = 0
+        for i,item in enumerate(self.items):
+          if self.get_animation_root(dpg.get_item_label(item)) == cur_root:
+            self.frames.append(i)
+
+      self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+      self.scroll_and_invoke_callback(self.items[self.frames[self.cur_frame]])
 
 def get_config_path():
   if 'APPDATA' in os.environ:
@@ -500,6 +523,14 @@ def toggle_element(element, override=None):
     dpg.configure_item(layer, show=new_enabled)
   mark_unsaved_changes()
 
+def toggle_animation(override=None):
+  global animation_on
+  cur_enabled = dpg.get_item_label(f"animation enabled") == ENABLED_STRING
+  new_enabled = (not cur_enabled) if override is None else override
+  animation_on = new_enabled
+  dpg.set_item_label(f"animation enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
+  colorize_button(f"animation enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
+
 def generate_controls(p):
   name = p.name
   tag_base = p.tag_base
@@ -720,6 +751,13 @@ def main(filename):
               dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
               for p in _attach_points:
                 generate_controls(p)
+              with dpg.group(horizontal=True, tag=f"animation controls"):
+                dpg.add_text(f" Animation: ")
+                dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
+                colorize_button(f"animation enabled", DISABLED_COLOR)
+                # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
+                # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
+                # dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
 
             dpg.add_separator()
 
@@ -826,10 +864,16 @@ def main(filename):
         file_box.scroll_to_specific_item(last_file)
 
   # below replaces, start_dearpygui()
+  time = 0
   while dpg.is_dearpygui_running():
-      # insert here any code you would like to run in the render loop
-      # you can manually stop by using stop_dearpygui()
-      # print("this will run every frame")
+      # Animate if necessary
+      if animation_on:
+        time += dpg.get_delta_time()
+        frame_speed = 1.0 / animation_speed
+        if (time > frame_speed):
+          time = time % frame_speed
+          file_box.advance_frame()
+
       dpg.render_dearpygui_frame()
 
   # Before we exit, export our current image if we have unsaved changes and autosave is on
