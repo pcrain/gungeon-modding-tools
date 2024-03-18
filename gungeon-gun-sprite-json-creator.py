@@ -479,6 +479,7 @@ def load_gun_image(filename):
 
 def update_file_list(filelist):
     dpg.configure_item("file picker box", items=filelist, default_value=current_file.replace(".png",""))
+    # dpg.configure_item("file picker box", items=filelist, default_value=current_file.replace(".png",""), tracked=True, track_offset=0.5)
 
 def load_json_from_dict(jdata):
   # Temporarily disable all previews
@@ -520,8 +521,8 @@ def set_current_file_from_import_dialog(sender, app_data):
   if os.path.exists(f"{stem}.json"):
     load_json_from_file(f"{stem}.json")
 
-def set_current_file_from_picker_box(sender, app_data):
-  fullpath = os.path.join(current_dir, app_data)
+def set_current_file_from_picker_box(sender, file_stem):
+  fullpath = os.path.join(current_dir, file_stem)
   if os.path.exists(f"{fullpath}.png"):
     load_gun_image(f"{fullpath}.png")
     if os.path.exists(f"{fullpath}.json"):
@@ -571,6 +572,21 @@ def toggle_hands(switch, value):
   # for p in _attach_points:
   #   toggle_element(p.tag_base, override=False)
 
+def next_file(delta):
+  picker = "file picker box"
+  cur_item = dpg.get_value(picker)
+  all_items = dpg.get_item_configuration("file picker box")["items"]
+  index = all_items.index(cur_item)
+  new_index = index + delta
+  if new_index < 0:
+    new_index = len(all_items) - 1
+  elif new_index >= len(all_items) - 1:
+    new_index = 0
+  new_item = all_items[new_index]
+  dpg.configure_item(picker, default_value=new_item)
+  # dpg.configure_item(new_item, tracked=True, track_offset=0.5)
+  set_current_file_from_picker_box(None, all_items[new_index])
+
 def main(filename):
   global orig_width, orig_height
 
@@ -601,9 +617,11 @@ def main(filename):
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
+      # with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
+      with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget"):
         dpg.add_input_text(width=256, hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box")
-        dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, tracked=True, callback=set_current_file_from_picker_box)
+        # dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
+        dpg.add_listbox([], tag="file picker box", num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
         pass
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
@@ -688,6 +706,10 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and save_changes_from_shortcut())
     # Ctrl + Z = revert active gun changes
     dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and revert_callback())
+    # Ctrl + Down = next file in picker
+    dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and next_file(1))
+    # Ctrl + Up = previous file in picker
+    dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and next_file(-1))
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
@@ -728,6 +750,7 @@ def maindemo():
   dpg.create_viewport(title='Custom Title', width=1200, height=800)
   dpg.setup_dearpygui()
 
+  import dearpygui.demo as demo
   demo.show_demo()
 
   dpg.show_viewport()
