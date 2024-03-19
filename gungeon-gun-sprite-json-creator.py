@@ -79,7 +79,7 @@ clipboard_file     = None
 unsaved_changes    = False
 file_box           = None
 animation_on       = False
-animation_speed    = 10
+animation_speed    = 30
 
 #Config globals
 jconf = {
@@ -154,13 +154,9 @@ class BetterListBox:
     def scroll_and_invoke_callback(self, sender):
         if self.callback:
             self.callback(dpg.get_item_parent(sender), dpg.get_item_label(sender))
-        for i,button in enumerate(dpg.get_item_children(dpg.get_item_parent(sender))[1]):
-            if button == sender:
-              self.cur_index = i
-            dpg.bind_item_theme(button, self.button_normal_theme)
-            # dpg.configure_item(button, tracked=False)
+        dpg.bind_item_theme(self.items[self.cur_index], self.button_normal_theme)
+        self.cur_index = self.items.index(sender)
         dpg.bind_item_theme(sender, self.button_selected_theme)
-        # dpg.configure_item(sender, tracked=False, track_offset=0.5)
         dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
 
     def scroll_to_specific_item(self, itemname):
@@ -444,7 +440,7 @@ def redraw_attach_point(p):
     offset = (center[0] - 2*PREVIEW_SCALE, center[1] - 2*PREVIEW_SCALE)
     # dpg.draw_image(HAND_IMAGE_TAG, center=_attach_point_coords[p.name], tag=f"{p.tag_base} hand")
     # dpg.draw_image(HAND_IMAGE_TAG, offset, offset + (4*PREVIEW_SCALE, 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
-    dpg.draw_image(HAND_IMAGE_TAG if "main" in p.tag_base else OFF_IMAGE_TAG, offset, (offset[0] + 4*PREVIEW_SCALE, offset[1] + 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
+    dpg.draw_image(HAND_IMAGE_PATH if "main" in p.tag_base else OFF_IMAGE_PATH, offset, (offset[0] + 4*PREVIEW_SCALE, offset[1] + 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
   else:
     dpg.draw_circle(center=center, radius=PREVIEW_SCALE, color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
   dpg.pop_container_stack()
@@ -545,7 +541,7 @@ def generate_controls(p):
     dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
 
 image_cache = {}
-def load_scaled_image(filename, image_tag):
+def load_scaled_image(filename):
   if (filename in image_cache):
     # print(f"using cached {filename}")
     (dpg_image, orig_width, orig_height) = image_cache[filename]
@@ -559,12 +555,12 @@ def load_scaled_image(filename, image_tag):
     scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
     dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
     image_cache[filename] = (dpg_image, orig_width, orig_height)
-
-  with dpg.texture_registry():
-    if dpg.does_alias_exist(image_tag):
-      dpg.remove_alias(image_tag)
-      dpg.delete_item(image_tag)
-    dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=image_tag)
+    with dpg.texture_registry():
+      if dpg.does_alias_exist(filename):
+        print("should be impossible")
+        dpg.remove_alias(filename)
+        dpg.delete_item(filename)
+      dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=filename)
   return image_cache[filename]
 
 def load_gun_image(filename):
@@ -575,7 +571,7 @@ def load_gun_image(filename):
     export_callback()
 
   # Load and resize the image internally since pygui doesn't seem to support nearest neighbor scaling
-  pil_image, orig_width, orig_height = load_scaled_image(filename, PREVIEW_IMAGE_TAG)
+  pil_image, orig_width, orig_height = load_scaled_image(filename)
   scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
 
   # Set our current file as appropriate
@@ -600,7 +596,7 @@ def load_gun_image(filename):
     if DRAW_INNER_BORDER:
       dpg.draw_rectangle((DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width,DRAWLIST_PAD+scaled_height),color=THIN_WHITE)
     #Draw sprite itself
-    dpg.draw_image(PREVIEW_IMAGE_TAG, (DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width, DRAWLIST_PAD+scaled_height))
+    dpg.draw_image(filename, (DRAWLIST_PAD,DRAWLIST_PAD), (DRAWLIST_PAD+scaled_width, DRAWLIST_PAD+scaled_height))
   dpg.pop_container_stack()
 
   if changed_dir:
@@ -735,8 +731,8 @@ def main(filename):
   dpg.setup_dearpygui()
 
   # Load necessary assets
-  load_scaled_image(HAND_IMAGE_PATH, HAND_IMAGE_TAG)
-  load_scaled_image(OFF_IMAGE_PATH, OFF_IMAGE_TAG)
+  load_scaled_image(HAND_IMAGE_PATH)
+  load_scaled_image(OFF_IMAGE_PATH)
 
   # Set up the main window
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
