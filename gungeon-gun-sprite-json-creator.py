@@ -169,7 +169,7 @@ class BetterListBox:
     def change_item(self, delta):
       num_vis_items = len(self.visible_items)
       if num_vis_items == 0:
-        return # shouldn't do anything of nothing is visible
+        return # shouldn't do anything if nothing is visible
 
       try:
         vis_index = (num_vis_items + self.visible_items.index(self.cur_index) + delta) % num_vis_items
@@ -708,6 +708,15 @@ def toggle_hands(switch, value):
 def next_file(delta):
   file_box.change_item(delta)
 
+def change_animation_speed(delta):
+  global animation_speed
+  animation_speed += delta
+  if (animation_speed < 1):
+    animation_speed = 1
+  elif (animation_speed > 60):
+    animation_speed = 60
+  dpg.set_value(f"animation fps", f"FPS: {animation_speed}")
+
 def main(filename):
   global orig_width, orig_height, file_box
 
@@ -760,6 +769,11 @@ def main(filename):
                 dpg.add_text(f" Animation: ")
                 dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
                 colorize_button(f"animation enabled", DISABLED_COLOR)
+                dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --")
+                dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -")
+                dpg.add_text(f"FPS: {animation_speed}", tag="animation fps")
+                dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +")
+                dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
                 # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
                 # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
                 # dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
