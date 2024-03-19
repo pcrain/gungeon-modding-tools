@@ -96,7 +96,7 @@ class BetterListBox:
     button_normal_theme   = None
     custom_listbox        = None
     callback              = None
-    items                 = None
+    items                 = []
     visible_items         = None
     width                 = None
     height                = None
@@ -132,6 +132,10 @@ class BetterListBox:
         self.replace_items(items)
 
     def replace_items(self, items):
+        for i,item in enumerate(self.items):
+          dpg.delete_item(item)
+
+        self.cur_index = 0
         self.items         = []
         for i,item in enumerate(items): #TODO: figure out how to nuke old items so we don't leak memory
             newitem = dpg.add_button(parent=self.custom_listbox, label=item, width=-1, callback=self.scroll_and_invoke_callback)
@@ -176,9 +180,7 @@ class BetterListBox:
       except ValueError:
         vis_index = 0
 
-      self.cur_index = self.visible_items[vis_index]
-      new_item = self.items[self.cur_index]
-      self.scroll_and_invoke_callback(new_item)
+      self.scroll_and_invoke_callback(self.items[self.visible_items[vis_index]])
 
     name_rx = re.compile(r"(.*)_[0-9]+")
     def get_animation_root(self, name):
@@ -652,6 +654,7 @@ def set_current_file_from_import_dialog(sender, app_data):
   load_gun_image(f"{stem}.png")
   if os.path.exists(f"{stem}.json"):
     load_json_from_file(f"{stem}.json")
+  file_box.scroll_to_specific_item(f"{stem}")
 
 def set_current_file_from_picker_box(sender, file_stem):
   fullpath = os.path.join(current_dir, file_stem)
