@@ -3,3 +3,6 @@
 *~
 _~
 README.html
+build/*
+dist/*
+*.spec

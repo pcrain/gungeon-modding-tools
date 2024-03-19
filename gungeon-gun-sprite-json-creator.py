@@ -18,18 +18,16 @@ try:
   from PIL import Image
   import screeninfo
 except:
-  def install_package(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", package])
-  try:
-    for package in ["dearpygui", "numpy", "pillow", "screeninfo"]:
-      install_package(package)
-    import dearpygui.dearpygui as dpg
-    import numpy as np
-    from PIL import Image
-    import screeninfo
-  except:
-    print("failed to install dearpygui, numpy, and/or pillow")
-    sys.exit(2)
+  print("missing dearpygui, numpy, and/or pillow")
+  sys.exit(2)
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 PROGRAM_NAME      = "gungeon-json-editor"
 TEST_IMAGE_2      = "/home/pretzel/uploads/omitb-gun-sprites-jsons/alphabeam_idle_003.png"
@@ -41,9 +39,9 @@ DISABLED_STRING   = "Disabled"
 FILE_PICKER_TAG   = "file picker box"
 PREVIEW_IMAGE_TAG = "preview_image"
 HAND_IMAGE_TAG    = "hand_image"
-HAND_IMAGE_PATH   = os.path.join(os.path.dirname(os.path.realpath(__file__)), "hand_main.png")
+HAND_IMAGE_PATH   = resource_path("hand_main.png")
 OFF_IMAGE_TAG     = "hand_off"
-OFF_IMAGE_PATH    = os.path.join(os.path.dirname(os.path.realpath(__file__)), "hand_off.png")
+OFF_IMAGE_PATH    = resource_path("hand_off.png")
 ENABLED_COLOR     = (64, 128, 64, 255)
 DISABLED_COLOR    = (64, 0, 0, 255)
 SHORTCUT_COLOR    = (192, 255, 255, 255)
@@ -982,7 +980,7 @@ def main(filename):
   last_file = None
   if filename is None:
     filename = get_config("last_file") or None
-    if not os.path.exists(filename):
+    if (filename is None) or (not os.path.exists(filename)):
       filename = None
   if filename is not None:
     load_gun_image(filename)

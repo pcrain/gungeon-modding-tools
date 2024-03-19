@@ -1,0 +1,11 @@
+#!/bin/bash
+# Helper script for making Linux / Windows executables for the gun json creator
+
+# wine C:/Python312/python.exe -m pip install -r ~/workspace/gungeon-modding-tools/requirements-json-editor.txt
+
+# pyinstaller \
+wine C:/Python312/Scripts/pyinstaller.exe \
+  --onefile \
+  --add-data=hand_main.png:. \
+  --add-data=hand_off.png:. \
+  gungeon-gun-sprite-json-creator.py
