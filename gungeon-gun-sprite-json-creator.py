@@ -8,7 +8,7 @@
 #   - figure out previewing indexed color images
 #   - hand previews
 
-import os, sys, subprocess, shlex, json, array, importlib, re
+import os, sys, subprocess, shlex, json, array, importlib, re, datetime, shutil
 from collections import namedtuple
 
 # Install missing packages as necessary
@@ -182,7 +182,7 @@ class BetterListBox:
 
       self.scroll_and_invoke_callback(self.items[self.visible_items[vis_index]])
 
-    name_rx = re.compile(r"(.*)_[0-9]+")
+    name_rx = re.compile(r"(.*)_[0-9]+(\.[^\.]*)?")
     def get_animation_root(self, name):
       return self.name_rx.sub(r"\1",name)
 
@@ -461,8 +461,10 @@ def move_hand_preview(x, y, p=None):
     return # return if our element is disabled
 
   # Round x and y values as necessary to snap to the grid
-  x = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_width * PREVIEW_SCALE, round(x / PREVIEW_SCALE) * PREVIEW_SCALE))
-  y = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_height * PREVIEW_SCALE, round(y / PREVIEW_SCALE) * PREVIEW_SCALE))
+  # x = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_width * PREVIEW_SCALE, round(x / PREVIEW_SCALE) * PREVIEW_SCALE))
+  # y = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_height * PREVIEW_SCALE, round(y / PREVIEW_SCALE) * PREVIEW_SCALE))
+  x = round(x / PREVIEW_SCALE) * PREVIEW_SCALE #NOTE: need to allow these to go offscreen for batch translating purposes
+  y = round(y / PREVIEW_SCALE) * PREVIEW_SCALE #NOTE: need to allow these to go offscreen for batch translating purposes
 
   # Set the global coordinates (TODO: maybe don't use globals here)
   _attach_point_coords[p.name] = (x,y)
@@ -718,7 +720,99 @@ def change_animation_speed(delta):
     animation_speed = 1
   elif (animation_speed > 60):
     animation_speed = 60
-  dpg.set_value(f"animation fps", f"FPS: {animation_speed}")
+  dpg.set_value(f"animation fps", f"{animation_speed} FPS")
+
+def show_translate_modal():
+  cur_json = os.path.join(current_dir,current_file.replace(".png",".json"))
+  if not os.path.exists(cur_json):
+    return # bail out if we the current json doesn't exist
+
+  # try to get the current gun's saved attach points
+  oldx = None
+  oldy = None
+  with open(cur_json, 'r') as fin:
+    jdata = json.load(fin)
+    if "attachPoints" not in jdata:
+      return
+    for i in range(1, len(jdata["attachPoints"])):
+      if jdata["attachPoints"][i]["name"] != "PrimaryHand":
+        continue
+      pos = jdata["attachPoints"][i]["position"]
+      oldx = pos["x"]
+      oldy = pos["y"]
+      break
+  if (oldx is None) or (oldy is None):
+    return # failed to read necessary JSON data
+  newx, newy = toJsonCoordinates(*_attach_point_coords[" Main Hand"])
+
+  if dpg.does_item_exist("translate modal"):
+    dpg.configure_item("translate modal", show=True)
+    return # if the dialog is already created, just show it
+
+  # get the base animation name and load all available jsons with the same name
+  root_name = file_box.get_animation_root(current_file)
+  jsons = []
+  for i,item in enumerate(file_box.items):
+    label = dpg.get_item_label(item)
+    if file_box.get_animation_root(label) != root_name:
+      continue
+    jpath = os.path.join(current_dir,f"{label}.json")
+    if not os.path.exists(jpath):
+      continue
+    jsons.append(jpath)
+
+  # create a modal dialog for translating all attach points corresponding to a sprite by the specified amount
+  with dpg.popup("export button", modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag="translate modal"):
+    dpg.add_text(f"Translating {len(jsons)} sprites matching:")
+    dpg.add_text(f"{root_name}_###", color=(192,255,128))
+    dpg.add_separator()
+    # dpg.add_checkbox(label="Translate All Animations for This Gun", tag="translate all")
+    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=True)
+    dpg.add_input_float(label=f"x: {int(16 * (newx - oldx))}px", width=150, tag=f"translate x box", format="%.04f", step=1.0/16.0, default_value=(newx - oldx),
+      callback=lambda: dpg.configure_item("translate x box", label=f"""x: {int(16 * dpg.get_value("translate x box"))}px"""))
+    dpg.add_input_float(label=f"y: {int(16 * (newy - oldy))}px", width=150, tag=f"translate y box", format="%.04f", step=1.0/16.0, default_value=(newy - oldy),
+    callback=lambda: dpg.configure_item("translate y box", label=f"""y: {int(16 * dpg.get_value("translate y box"))}px"""))
+    dpg.add_separator()
+    dpg.add_text(f"TIP: you can prepopulate the fields above by moving the primary hand attach point in the editor")
+    dpg.add_separator()
+    with dpg.group(horizontal=True):
+      dpg.add_button(label="Translate", width=75, callback=lambda: translate_jsons(jsons))
+      dpg.add_button(label="Cancel", width=75, callback=lambda: hide_translate_modal())
+  dpg.configure_item("translate modal", show=True)
+
+def translate_jsons(jsons):
+  # get necessary paramters
+  xshift = dpg.get_value("translate x box")
+  yshift = dpg.get_value("translate y box")
+  backup = dpg.get_value("translate backups")
+
+  # make backups as necessary
+  if backup:
+    bpath = os.path.join(current_dir,f"json_backup_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+    os.makedirs(bpath)
+    for j in jsons:
+      shutil.copy(j, os.path.join(bpath,os.path.basename(j)))
+
+  # Adjust attach points for all JSONs in the batch
+  for j in jsons:
+    with open(j, 'r') as fin:
+      jdata = json.load(fin)
+    if "attachPoints" not in jdata:
+      continue
+    for i in range(1, len(jdata["attachPoints"])):
+      jdata["attachPoints"][i]["position"]["x"] += xshift
+      jdata["attachPoints"][i]["position"]["y"] += yshift
+    with open(j, 'w') as fout:
+      fout.write(json.dumps(jdata, indent=2))
+
+  # Hide the modal and reload the current gun's JSON
+  hide_translate_modal()
+  load_json_from_file(os.path.join(current_dir,current_file.replace(".png",".json")))
+
+def hide_translate_modal():
+  if dpg.does_item_exist("translate modal"):
+    dpg.configure_item("translate modal", show=False)
+    dpg.delete_item("translate modal")
 
 def main(filename):
   global orig_width, orig_height, file_box
@@ -774,7 +868,7 @@ def main(filename):
                 colorize_button(f"animation enabled", DISABLED_COLOR)
                 dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --")
                 dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -")
-                dpg.add_text(f"FPS: {animation_speed}", tag="animation fps")
+                dpg.add_text(f"{animation_speed} FPS", tag="animation fps")
                 dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +")
                 dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
                 # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
@@ -822,6 +916,11 @@ def main(filename):
                 dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
                 dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
                 dpg.add_text("", tag="paste filename")
+              # Translate Button
+              with dpg.group(horizontal=True, tag="translate box"):
+                dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
+                # dpg.add_text("", tag="paste filename")
 
         # Set up the main drawing list
         with dpg.drawlist(width=1, height=1, tag="drawlist"):
@@ -852,6 +951,8 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and save_changes_from_shortcut())
     # Ctrl + Z = revert active gun changes
     dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and revert_callback())
+    # Ctrl + T = show attach point translate modal
+    dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and show_translate_modal())
     # Ctrl + Down = next file in picker
     dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and next_file(1))
     # Ctrl + Up = previous file in picker
