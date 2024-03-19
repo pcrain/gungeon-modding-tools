@@ -87,6 +87,7 @@ jconf = {
   "no_warn_switch"    : False,
   "autosave"          : False,
   "show_hands"        : True,
+  "make_backups"      : True,
   "last_file"         : None,
 }
 
@@ -478,6 +479,7 @@ def move_hand_preview(x, y, p=None):
   redraw_attach_point(p)
 
 def on_plot_clicked(sender, app_data):
+  toggle_animation(False)
   if dpg.is_key_down(dpg.mvKey_Shift):
     p=_attach_point_dict["      Clip"]
   else:
@@ -487,6 +489,7 @@ def on_plot_clicked(sender, app_data):
   mark_unsaved_changes()
 
 def on_plot_right_clicked(sender, app_data):
+  toggle_animation(False)
   if dpg.is_key_down(dpg.mvKey_Shift):
     p=_attach_point_dict["    Casing"]
   else:
@@ -691,6 +694,7 @@ def filter_files(_, query):
   current_search = query
 
 def save_changes_from_shortcut():
+  toggle_animation(False)
   if jconf["no_warn_overwrite"]:
     export_callback()
   else:
@@ -710,6 +714,9 @@ def toggle_hands(switch, value):
   # for p in _attach_points:
   #   toggle_element(p.tag_base, override=False)
 
+def toggle_backups(switch, value):
+  set_config("make_backups", value)
+
 def next_file(delta):
   file_box.change_item(delta)
 
@@ -723,6 +730,7 @@ def change_animation_speed(delta):
   dpg.set_value(f"animation fps", f"{animation_speed} FPS")
 
 def show_translate_modal():
+  toggle_animation(False)
   cur_json = os.path.join(current_dir,current_file.replace(".png",".json"))
   if not os.path.exists(cur_json):
     return # bail out if we the current json doesn't exist
@@ -767,7 +775,7 @@ def show_translate_modal():
     dpg.add_text(f"{root_name}_###", color=(192,255,128))
     dpg.add_separator()
     # dpg.add_checkbox(label="Translate All Animations for This Gun", tag="translate all")
-    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=True)
+    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=get_config("make_backups"))
     dpg.add_input_float(label=f"x: {int(16 * (newx - oldx))}px", width=150, tag=f"translate x box", format="%.04f", step=1.0/16.0, default_value=(newx - oldx),
       callback=lambda: dpg.configure_item("translate x box", label=f"""x: {int(16 * dpg.get_value("translate x box"))}px"""))
     dpg.add_input_float(label=f"y: {int(16 * (newy - oldy))}px", width=150, tag=f"translate y box", format="%.04f", step=1.0/16.0, default_value=(newy - oldy),
@@ -778,6 +786,8 @@ def show_translate_modal():
     with dpg.group(horizontal=True):
       dpg.add_button(label="Translate", width=75, callback=lambda: translate_jsons(jsons))
       dpg.add_button(label="Cancel", width=75, callback=lambda: hide_translate_modal())
+    with dpg.handler_registry(tag="translate keyboard handler"):
+      dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: hide_translate_modal())
   dpg.configure_item("translate modal", show=True)
 
 def translate_jsons(jsons):
@@ -810,9 +820,14 @@ def translate_jsons(jsons):
   load_json_from_file(os.path.join(current_dir,current_file.replace(".png",".json")))
 
 def hide_translate_modal():
+  if dpg.does_item_exist("translate keyboard handler"):
+    dpg.delete_item("translate keyboard handler")
   if dpg.does_item_exist("translate modal"):
     dpg.configure_item("translate modal", show=False)
     dpg.delete_item("translate modal")
+
+def control_pressed():
+  return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
 def main(filename):
   global orig_width, orig_height, file_box
@@ -862,6 +877,7 @@ def main(filename):
               dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
               for p in _attach_points:
                 generate_controls(p)
+              dpg.add_text(f"")
               with dpg.group(horizontal=True, tag=f"animation controls"):
                 dpg.add_text(f" Animation: ")
                 dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
@@ -873,18 +889,19 @@ def main(filename):
                 dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
                 # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
                 # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
-                # dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
+                dpg.add_text(f" Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
 
-            dpg.add_separator()
+            # dpg.add_separator()
 
             # Set up our config / import / export / copy buttons
             with dpg.group(horizontal=False, tag="file controls"):
-              dpg.add_separator()
+              # dpg.add_separator()
               dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
               # no easy way to get this to work with listpicker, so hidden by default
               dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
               dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
               dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
+              dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
               # dpg.add_separator()
 
               # Import button
@@ -940,23 +957,25 @@ def main(filename):
   # Set up some global keyboard shortcuts
   with dpg.handler_registry(tag="global keyboard handler"):
     # Ctrl + C = copy gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_C, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and copy_state())
+    dpg.add_key_press_handler(key=dpg.mvKey_C, callback=lambda: control_pressed() and copy_state())
     # Ctrl + V = paste gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_V, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and paste_state())
+    dpg.add_key_press_handler(key=dpg.mvKey_V, callback=lambda: control_pressed() and paste_state())
     # Ctrl + O = open gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and open_import_dialog())
+    dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: control_pressed() and open_import_dialog())
     # Ctrl + F = focus file filter box
-    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and dpg.focus_item("file search box"))
+    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: control_pressed() and dpg.focus_item("file search box"))
     # Ctrl + S = save active gun changes
-    dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and save_changes_from_shortcut())
+    dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: control_pressed() and save_changes_from_shortcut())
     # Ctrl + Z = revert active gun changes
-    dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and revert_callback())
+    dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: control_pressed() and revert_callback())
     # Ctrl + T = show attach point translate modal
-    dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and show_translate_modal())
+    dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: control_pressed() and show_translate_modal())
+    # Ctrl + A = show attach point translate modal
+    dpg.add_key_press_handler(key=dpg.mvKey_A, callback=lambda: control_pressed() and toggle_animation())
     # Ctrl + Down = next file in picker
-    dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and next_file(1))
+    dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: control_pressed() and next_file(1))
     # Ctrl + Up = previous file in picker
-    dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: dpg.is_key_down(dpg.mvKey_Control) and next_file(-1))
+    dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: control_pressed() and next_file(-1))
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
