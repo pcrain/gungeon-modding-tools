@@ -54,6 +54,7 @@ WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
 LIST_ITEM_HEIGHT  = 18 # estimated through experimentation
 
+CachedImage = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
 AttachPoint = namedtuple('AttachPoint', ['name', 'tag_base', 'internal_name', 'color', 'shortcut', 'enabled_default'])
 _attach_points = [
   AttachPoint(" Main Hand","main hand", "PrimaryHand",   (255, 255,   0, 255), "Left Click",          ENABLED_STRING ),
@@ -543,20 +544,28 @@ def generate_controls(p):
     dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
     dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
 
+image_cache = {}
 def load_scaled_image(filename, image_tag):
-  pil_image = Image.open(filename)
-  if pil_image.mode != "RGBA":
-    pil_image = pil_image.convert(mode='RGBA')
-  orig_width, orig_height = pil_image.size
-  scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
-  scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
-  dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
+  if (filename in image_cache):
+    # print(f"using cached {filename}")
+    (dpg_image, orig_width, orig_height) = image_cache[filename]
+    scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+  else:
+    pil_image = Image.open(filename)
+    if pil_image.mode != "RGBA":
+      pil_image = pil_image.convert(mode='RGBA')
+    orig_width, orig_height = pil_image.size
+    scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+    scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
+    dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
+    image_cache[filename] = (dpg_image, orig_width, orig_height)
+
   with dpg.texture_registry():
     if dpg.does_alias_exist(image_tag):
       dpg.remove_alias(image_tag)
       dpg.delete_item(image_tag)
     dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=image_tag)
-  return (scaled_image, orig_width, orig_height)
+  return image_cache[filename]
 
 def load_gun_image(filename):
   global orig_width, orig_height, current_file, current_dir
@@ -871,7 +880,7 @@ def main(filename):
         time += dpg.get_delta_time()
         frame_speed = 1.0 / animation_speed
         if (time > frame_speed):
-          time = time % frame_speed
+          time %= frame_speed
           file_box.advance_frame()
 
       dpg.render_dearpygui_frame()
