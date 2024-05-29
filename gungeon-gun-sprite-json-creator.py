@@ -1,4 +1,4 @@
-#!/usr/bin/python3.11
+#!/usr/bin/python
 #Gungeon JSON visualizer and creator
 
 #  Manually install missing packages with:
