@@ -33,7 +33,7 @@ def processAssets(decomp_path, guidmap):
   for root, subdirs, files in os.walk(decomp_path):
     for f in files:
       fpath = os.path.join(root, f)
-      if not fpath.endswith(".prefab"):
+      if not (fpath.endswith(".prefab") or fpath.endswith(".asset")):
         continue
 
       count += 1
