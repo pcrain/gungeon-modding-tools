@@ -2,11 +2,12 @@
 
 ## Files
 
-| Filename                           | Description                                             |
-| :--------------------------        | :------------------------------------------------------ |
-| gen-gungeon-audio-bank.py          | generate WWise audio banks from a folder of WAV files   |
-| gungeon-gun-sprite-json-creator.py | visual editor for hand attach points on gun sprites     |
-|                                    |                                                         |
+| Filename                           | Description                                                   |
+| :--------------------------        | :------------------------------------------------------       |
+| gen-gungeon-audio-bank.py          | generate WWise audio banks from a folder of WAV files         |
+| gungeon-gun-sprite-json-creator.py | visual editor for hand attach points on gun sprites           |
+| annotate-assets.py                 | adds script and asset name annotations to extracted assets    |
+|                                    |                                                               |
 
 ### gen-gungeon-audio-bank.py
 
@@ -29,6 +30,14 @@ Basic Usage:
     - can use eventname+"_pause" to pause the currently playing audio globally (only tested with music, not normal sounds)
     - can use eventname+"_resume" to resume the currently playing audio globally (only tested with music, not normal sounds)
   - run the script with the `-h` flag for more info
+
+Automatic Usage:
+  - change the `ALLOW_AUTORUN` variable near the top of the script from `False` to `True` and copy the script to the folder containing your .wav files to enable autorun mode
+  - in autorun mode, whenever the script is run without arguments, the following will happen automatically:
+    - the script will scan its current directory for any `.csv` files, and load audio metadata from the first `.csv` file it finds
+    - if no `.csv` file is found, the script will create a default `Sounds.csv` file in its directory
+    - the script will scan its current directory for wave files and assemble them all in a soundbank with the same base name as the metadata `.csv` (e.g., `Sounds.bnk`)
+    - consequently, renaming the audio `.csv` file will change the filename of the automatically-generated sound bank
 
 Known Bugs:
   - 8-bit PCM files seem to crash, so convert to 16-bit LE PCM wav before using
@@ -67,4 +76,14 @@ Advanced Usage:
   - clicking "Copy Gun Data" will copy the current attach points and enable / disable status to an internal clipboard
   - clicking "Paste Gun Data" will paste attach point data from the last copied gun over the current one
     - useful for editing multiple frames with similar attach points
+```
+
+### annotate-assets.py
+```
+Requirements:
+  - python 3.11+ (might work with older versions, untested)
+
+Basic Usage:
+  - running `annotate-assets.py <path to gungeon decomp>` will scan and annotate to all `.asset` and `.prefab` files with information about scripts and resource names
+  - these new files will be created with the extensions `.asset.annotated` and `.prefab.annotated`
 ```
