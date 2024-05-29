@@ -3,6 +3,8 @@
 #  Run with -h flag for usage information
 #  Note: volume is measured in dB gain, not percentage
 
+ALLOW_AUTORUN = False # change to true if you wish to allow this script to autogenerate sound files when ran without arguments
+
 #References:
 #  - BNK File Format: https://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
 #    - Backup Link:   https://web.archive.org/web/20230817173834/http://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
@@ -62,12 +64,9 @@
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
 
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
-ENABLE_OGG = False # not working for now and corrupts entire soundbank if enabled, do not use
 
 # Import necessary modules
 import sys, os, struct, io, wave, csv, argparse, time
-# Only needed for reading ogg files
-import pyaudio
 # import numpy as np
 # from soundfile import SoundFile
 
@@ -107,10 +106,16 @@ else: #no colors
 # Create argument parser and parse the args
 parser = argparse.ArgumentParser()
 parser.description = f"{os.path.basename(sys.argv[0])}: {SCRIPT_DESCRIPTION}"
-parser.add_argument("input_path",
-  help=f"folder containing all of the wav files to be parsed")
-parser.add_argument("output_bank_name",
-  help=f"name of output bank; puts in {col.YLW}input_path{col.BLN} unless absolute path is given")
+if ALLOW_AUTORUN:
+  parser.add_argument("-i", "--input_path",
+    help=f"folder containing all of the wav files to be parsed")
+  parser.add_argument("-o", "--output_bank_name",
+    help=f"name of output bank; puts in {col.YLW}input_path{col.BLN} unless absolute path is given")
+else:
+  parser.add_argument("input_path",
+    help=f"folder containing all of the wav files to be parsed")
+  parser.add_argument("output_bank_name",
+    help=f"name of output bank; puts in {col.YLW}input_path{col.BLN} unless absolute path is given")
 parser.add_argument("-v", "--verbose",   action="store_true",
   help=f"print verbose information")
 parser.add_argument("-s", "--spreadsheet",
@@ -255,7 +260,7 @@ def findWavsInDirectory(path,recursive=False):
     p = os.path.join(path,f)
     if os.path.isdir(p) and recursive:
       wavs_to_parse.extend(findWavsInDirectory(p,True))
-    if not ((p.endswith(".wav") and isWaveFile(p)) or (ENABLE_OGG and p.endswith(".ogg"))):
+    if not (p.endswith(".wav") and isWaveFile(p)):
       continue
     wavs_to_parse.append(p)
   return wavs_to_parse
@@ -814,7 +819,7 @@ class BNKParser(Parser):
     bs.asConst(root["bnk_head"] ,val=b'BKHD',tag="bkhd header")
     bs.asSigned(root["seclen"]  ,val=[24,28],tag="section length")
     bs.asSigned(root["version"]  ,tag="bank version")
-    bs.asSigned(root["bankid"]   ,tag="bank id")
+    bs.asUnsigned(root["bankid"] ,tag="bank id")
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="?????")
@@ -957,7 +962,7 @@ class BNKParser(Parser):
 
         if int(h["action_type"]) == 4: #play
           bs.asByte(h["action_play_fade_curve"] ,tag=f"Action {i} play fade curve (4 == linear)")
-          bs.asSigned(h["bank_id"] ,val=root["bankid"],tag=f"Action {i} bank id")
+          bs.asUnsigned(h["bank_id"] ,val=root["bankid"],tag=f"Action {i} bank id")
         elif int(h["action_type"]) == 1: #stop
           bs.asByte(h["action_stop_fade_curve"]     ,tag=f"Action {i} stop fade curve (4 == linear)")
           bs.asByte(h["action_stop_flags"]          ,val=6,tag=f"Action {i} stop bit flags (6 == expected)")
@@ -1326,6 +1331,8 @@ def loadSoundParamsFromCSV(csvfile):
       header = [s.strip() for s in next(reader)]
       ddict = {}
       for row in reader:
+        if len(row) < len(header):
+          continue
         ddict[row[0].strip()] = {header[i] : row[i].strip() for i in range(1,len(header))}
     return ddict
 
@@ -1389,11 +1396,28 @@ def main():
 
   if args.spreadsheet and not os.path.exists(args.spreadsheet):
     bp.createExampleSpreadsheet(args.spreadsheet)
-    print(f"Saved example spreadhseet to {args.spreadsheet}")
+    print(f"Saved example spreadsheet to {args.spreadsheet}")
 
   # (DEBUG) compute checksums w.r.t. reference bank
   # os.system(f"/bin/md5sum ./ref.bnk {outfile}")
 
-if __name__ == "__main__":
+def mainAutorun():
+  args.overwrite = True
+  args.input_path = os.path.dirname(os.path.realpath(__file__))
+  bankname = "Sounds"
+  for file in os.listdir(args.input_path):
+      if file.endswith(".csv"):
+          bankname = file[:-4]
+          break
+  args.spreadsheet = os.path.join(args.input_path, f"{bankname}.csv")
+  args.output_bank_name = os.path.join(args.input_path, f"{bankname}.bnk")
   main()
+  print()
+  input("Press return to exit")
+
+if __name__ == "__main__":
+  if ALLOW_AUTORUN and (args.input_path is None):
+    mainAutorun()
+  else:
+    main()
   # print(stringToBnkID("Play_MUS_Boss_Theme_Beholster")) #1075162602
