@@ -7,6 +7,7 @@
 | gen-gungeon-audio-bank.py          | generate WWise audio banks from a folder of WAV files         |
 | gungeon-gun-sprite-json-creator.py | visual editor for hand attach points on gun sprites           |
 | annotate-assets.py                 | adds script and asset name annotations to extracted assets    |
+| steamdeck-installer.sh             | modded Gungeon installer for Steam Deck / most Linux distros  |
 |                                    |                                                               |
 
 ### gen-gungeon-audio-bank.py
@@ -79,6 +80,7 @@ Advanced Usage:
 ```
 
 ### annotate-assets.py
+
 ```
 Requirements:
   - python 3.11+ (might work with older versions, untested)
@@ -86,4 +88,14 @@ Requirements:
 Basic Usage:
   - running `annotate-assets.py <path to gungeon decomp>` will scan and annotate to all `.asset` and `.prefab` files with information about scripts and resource names
   - these new files will be created with the extensions `.asset.annotated` and `.prefab.annotated`
+```
+
+### steamdeck-installer.sh
+```
+Usage:
+ - download and move to an empty folder somewhere
+ - open a terminal in the folder containing this script and run the following:
+
+      chmod +x ./steamdeck-installer.sh
+      ./steamdeck-installer.sh
 ```
