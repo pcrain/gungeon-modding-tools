@@ -819,7 +819,7 @@ class BNKParser(Parser):
     bs.asSigned(root["seclen"]  ,val=[24,28],tag="section length")
     bs.asSigned(root["version"]  ,tag="bank version")
     bs.asUnsigned(root["bankid"] ,tag="bank id")
-    bs.asSigned(root[""]         ,tag="?????")
+    bs.asUnsigned(root[""]       ,tag="?????") # language id
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="?????")
     bs.asSigned(root[""]         ,tag="padding")
