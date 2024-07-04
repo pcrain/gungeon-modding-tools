@@ -158,6 +158,9 @@ HIRC_TYPE_SFX    = 2 # HIRC event type for a Sound Effect
 HIRC_TYPE_ACTION = 3 # HIRC event type for an Action
 HIRC_TYPE_EVENT  = 4 # HIRC event type for an Event
 
+# Misc. debug stuff
+DUMP_WAV_FILES = False
+
 #Verbose printing
 def vprint(*listargs, **kwargs):
   if args.verbose:
@@ -684,10 +687,6 @@ class WEMParser(Parser):
           break
 
     wemdata = bs.iostream.getvalue()
-    # if data_size == 1512084:
-    #   print(f"FOUND: read {bs.bytes_read - start_bytes}")
-    #   with open(f"/home/pretzel/downloads/gungeon-sounds/beholster.wem", 'wb') as fout:
-    #     fout.write(wemdata[start_bytes:bs.bytes_read])
     return wemdata
 
   def createMinimal(self, isOgg):
@@ -836,7 +835,7 @@ class BNKParser(Parser):
     # root["wemfileinfo"] = []
     for i in range(wemfiles):
       w = root["wemfileinfo"].next()
-      bs.asSigned(w["wemid"],tag=f"wem {i} id")
+      bs.asUnsigned(w["wemid"],tag=f"wem {i} id")
       bs.asSigned(w["wemoff"],tag=f"wem {i} offset")
       bs.asSigned(w["wemlen"],tag=f"wem {i} length")
       wemids.append(w["wemid"])
@@ -853,6 +852,8 @@ class BNKParser(Parser):
         bs.asAny(w["extra_bytes"],extra)
 
       WEMParser().parse(bs,w,mode) # parse WEM substructure
+      if DUMP_WAV_FILES:
+        saveWAVData(f"/home/pretzel/downloads/{int(wemids[i])}.wav", w["wav_data"].val, int(w["channels"]), int(w["sample_rate"]), int(w["sample_width"]) // 8)
       # playWEMData(w["wem-data"])
 
     bs.asConst(root["hirc_head"],val=b'HIRC',tag="hirc header")
@@ -864,11 +865,11 @@ class BNKParser(Parser):
 
       if h["type"] == 2: #sound effect
         bs.asSigned(h["subseclen"]      ,tag=f"SFX {i} subsection length")
-        bs.asSigned(h["sfx_id"]         ,tag=f"SFX {i} ID")
+        bs.asUnsigned(h["sfx_id"]       ,tag=f"SFX {i} ID")
         bs.asSigned(h["plugin_id"]      ,val=[65537,262145,131073],tag=f"SFX {i} PluginID (65537 = PCM, 131073 = ADPCM, 262145 = VORBIS)")
         bs.asByte(h["external_state"] ,val=0,tag=f"SFX {i} external state (should be 0 == embedded)")
         if h["external_state"] == 0:
-          bs.asSigned(h["wem_file_id"]        ,val=wemids,tag=f"SFX {i} WEM file id")
+          bs.asUnsigned(h["wem_file_id"]      ,val=wemids,tag=f"SFX {i} WEM file id")
           bs.asSigned(h["wem_file_num_bytes"] ,val=wemlengths,tag=f"SFX {i} in-memory byte length")
         else:
           raise Exception("don't know how to handle this event type")
@@ -945,10 +946,10 @@ class BNKParser(Parser):
 
       elif h["type"] == 3: #action
         action_len = bs.asSigned(h["subseclen"]       ,tag=f"Action {i} subsection length")
-        bs.asSigned(h["action_id"]       ,tag=f"Action {i} ID")
+        bs.asUnsigned(h["action_id"]       ,tag=f"Action {i} ID")
         bs.asByte(h["action_scope"]    ,tag=f"Action {i} action scope (byte 1/2) (3 == game object, 2 = global)")
         bs.asByte(h["action_type"]     ,val=[1,2,3,4,12,14,18],tag=f"Action {i} action type (byte 2/2) (1 == stop, 2 pause, 3 resume, 4 play, 18 setState, 14 SetLPF_O, 12 set bus volume)")
-        bs.asSigned(h["action_sfx_id"]   ,tag=f"Action {i} game object (SFX) id")
+        bs.asUnsigned(h["action_sfx_id"],tag=f"Action {i} game object (SFX) id")
         bs.asByte(h["action_bus_bits"] ,tag=f"Action {i} bus bits")
         action_props = bs.asByte(h["action_props_1"], tag=f"Action {i} props (usually 0)")
         for j in range(action_props):
@@ -1000,7 +1001,7 @@ class BNKParser(Parser):
         bs.asByte(h["num_events"] ,tag=f"Event {i} num actions")
         for j in range(int(h["num_events"])):
           e = h["events"].next()
-          bs.asSigned(e,tag=f"Event {i} action {j} id")
+          bs.asUnsigned(e,tag=f"Event {i} action {j} id")
 
       else:
         sslen = bs.asSigned(h["subseclen"]      ,tag=f"Generic {i} subsection length")
@@ -1016,7 +1017,8 @@ class BNKParser(Parser):
     root["seclen"]          = 24
     root["version"]         = 128
     root["bankid"]          = bankid
-    root[""]                = 393239870 #magic number
+    root[""]                = bankid
+    # root[""]                = 393239870 # stringToBnkID("SFX") [marked internally as "dwLanguageID", should maybe also be bankid?]
     root[""]                = 0
     root[""]                = 0
     root[""]                = 0
@@ -1217,13 +1219,13 @@ class BNKParser(Parser):
     resume_event_id    = stringToBnkID(base_fname+"_resume")
     stop_event_id      = stringToBnkID(base_fname+"_stop")
     stop_all_event_id  = stringToBnkID(base_fname+"_stop_all")
-    wemid              = self.n_embeds+300000     # non-magic, needs to be unique (can't be less than 300,000???)
-    sfx_id             = self.n_embeds+200000     # non-magic, needs to be unique
-    play_action_id     = self.n_embeds+100000     # non-magic, needs to be unique
-    pause_action_id    = self.n_embeds+110000     # non-magic, needs to be unique
-    resume_action_id   = self.n_embeds+120000     # non-magic, needs to be unique
-    stop_action_id     = self.n_embeds+130000     # non-magic, needs to be unique
-    stop_all_action_id = self.n_embeds+140000     # non-magic, needs to be unique
+    wemid              = stringToBnkID(base_fname+"_wem_id")   #non-magic, needs to be unique
+    sfx_id             = stringToBnkID(base_fname+"_sfx_id")   #non-magic, needs to be unique
+    play_action_id     = stringToBnkID(str(play_event_id))     #non-magic, needs to be unique
+    pause_action_id    = stringToBnkID(str(pause_event_id))    #non-magic, needs to be unique
+    resume_action_id   = stringToBnkID(str(resume_event_id))   #non-magic, needs to be unique
+    stop_action_id     = stringToBnkID(str(stop_event_id))     #non-magic, needs to be unique
+    stop_all_action_id = stringToBnkID(str(stop_all_event_id)) #non-magic, needs to be unique
     vprint(f"      >> event id for playing      '{base_fname            }' -> {play_event_id}")
     vprint(f"      >> event id for pausing      '{base_fname+'_pause'   }' -> {pause_event_id}")
     vprint(f"      >> event id for resuming     '{base_fname+'_resume'  }' -> {resume_event_id}")
