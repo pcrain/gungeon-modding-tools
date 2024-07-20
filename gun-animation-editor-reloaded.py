@@ -29,7 +29,7 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-PROGRAM_NAME      = "gungeon-json-editor"
+PROGRAM_NAME      = "gun-animation-editor-reloaded"
 TEST_IMAGE_2      = "/home/pretzel/uploads/omitb-gun-sprites-jsons/alphabeam_idle_003.png"
 PREVIEW_SCALE     = 8 # magnification factor for preview
 PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
@@ -81,9 +81,9 @@ animation_speed    = 30
 
 #Config globals
 jconf = {
-  "no_warn_overwrite" : False,
-  "no_warn_switch"    : False,
-  "autosave"          : False,
+  "no_warn_overwrite" : True,
+  "no_warn_switch"    : True,
+  "autosave"          : True,
   "show_hands"        : True,
   "make_backups"      : True,
   "last_file"         : None,
@@ -215,10 +215,10 @@ def load_config():
   global jconf
   config_path = get_config_path()
   if not os.path.exists(config_path):
-    return
+    set_config()
 
   with open(config_path, 'r') as fin:
-    jconf = json.load(fin)
+    jconf.update(json.load(fin))
 
   for k, v in jconf.items():
     if dpg.does_item_exist(f"config {k}"):
@@ -227,8 +227,9 @@ def load_config():
 def get_config(key):
   return jconf.get(key,False)
 
-def set_config(key, value):
-  jconf[key] = value
+def set_config(key = None, value = None):
+  if key is not None and value is not None:
+    jconf[key] = value
   with open(get_config_path(), 'w') as fout:
     fout.write(json.dumps(jconf,indent=2))
   if unsaved_changes: # change the export button to the noprompt version if necessary
