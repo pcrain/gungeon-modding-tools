@@ -127,7 +127,7 @@ class BetterListBox:
                 dpg.add_theme_color(dpg.mvThemeCol_Button, (51, 51, 55, 255))
 
         # with dpg.child_window(height=self.height, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
-        with dpg.child_window(autosize_y=False, height=100, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
+        with dpg.child_window(autosize_y=False, height=height, width=self.width, border=False, parent=self.parent) as self.custom_listbox:
           pass
         dpg.bind_item_theme(self.custom_listbox, self.custom_listbox_theme)
 
@@ -587,6 +587,12 @@ def load_scaled_image(filename):
       dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=filename)
   return image_cache[filename]
 
+def refresh_file_list():
+  global dir_file_list, filtered_file_list
+  dir_file_list = sorted([f[:-4] for f in filter(lambda x: x.endswith(".png"), os.listdir(current_dir))])
+  filtered_file_list = dir_file_list
+  update_file_list(filtered_file_list)
+
 def load_gun_image(filename):
   global orig_width, orig_height, current_file, current_dir
 
@@ -624,10 +630,7 @@ def load_gun_image(filename):
   dpg.pop_container_stack()
 
   if changed_dir:
-    global dir_file_list, filtered_file_list
-    dir_file_list = sorted([f[:-4] for f in filter(lambda x: x.endswith(".png"), os.listdir(current_dir))])
-    filtered_file_list = dir_file_list
-    update_file_list(filtered_file_list)
+    refresh_file_list()
 
   load_json_from_dict(get_default_gun_json(orig_width, orig_height))
   clear_unsaved_changes()
@@ -887,86 +890,88 @@ def main(filename):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
       # with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
-      with dpg.group(horizontal=False, width=300, height=wh - 40, tag="filewidget") as filewidgetgroup:
-        dpg.add_input_text(width=256, hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box")
+      with dpg.group(horizontal=False, tag="filewidget") as filewidgetgroup:
+        with dpg.group(horizontal=True, tag="findbarandbutton") as findwidgetgroup:
+          dpg.add_button(label="Open", callback=open_import_dialog, tag="import button", show=True)
+          dpg.add_button(label="Refresh", callback=lambda: refresh_file_list(), tag=f"refresh files")
+        #   dpg.add_button(label="F6", width=64, height=64, callback=lambda: print(""), tag=f"ding files")
+        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", width=256, callback=filter_files, tag="file search box") # can't set size???
         # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
         # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
-        file_box = BetterListBox(items=[], parent=filewidgetgroup, height=wh, width=100, callback=set_current_file_from_picker_box)
-        pass
+        file_box = BetterListBox(items=[], width=256, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
+
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
-        with dpg.group(horizontal=False, tag="main column"):
-          with dpg.group(horizontal=True, tag="info bar"):
-            # Set up our control box
-            with dpg.group(horizontal=False, tag="controls"):
-              dpg.add_text(f"Working Dir: ", tag="image path")
-              dpg.add_text(f"Image Name:  ", tag="image name")
-              dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
-              for p in _attach_points:
-                generate_controls(p)
-              dpg.add_text(f"")
-              with dpg.group(horizontal=True, tag=f"animation controls"):
-                dpg.add_text(f" Animation: ")
-                dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
-                colorize_button(f"animation enabled", DISABLED_COLOR)
-                dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --")
-                dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -")
-                dpg.add_text(f"{animation_speed} FPS", tag="animation fps")
-                dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +")
-                dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
-                # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
-                # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
-                dpg.add_text(f" Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
 
+        with dpg.group(horizontal=True, tag="info bar"):
+          # Set up our control box
+          with dpg.group(horizontal=False, tag="controls"):
+            dpg.add_text(f"Working Dir: ", tag="image path")
+            dpg.add_text(f"Image Name:  ", tag="image name")
+            dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
+            for p in _attach_points:
+              generate_controls(p)
+            dpg.add_text(f"")
+            with dpg.group(horizontal=True, tag=f"animation controls"):
+              dpg.add_text(f" Animation: ")
+              dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
+              colorize_button(f"animation enabled", DISABLED_COLOR)
+              dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --")
+              dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -")
+              dpg.add_text(f"{animation_speed} FPS", tag="animation fps")
+              dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +")
+              dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
+              # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
+              # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
+              dpg.add_text(f" Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
+
+          # Set up our config / import / export / copy buttons
+          with dpg.group(horizontal=False, tag="file controls"):
+            # dpg.add_separator()
+            dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
+            # no easy way to get this to work with listpicker, so hidden by default
+            dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
+            dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
+            dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
+            dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
+            dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
+            dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
             # dpg.add_separator()
 
-            # Set up our config / import / export / copy buttons
-            with dpg.group(horizontal=False, tag="file controls"):
-              # dpg.add_separator()
-              dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
-              # no easy way to get this to work with listpicker, so hidden by default
-              dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
-              dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
-              dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
-              dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
-              dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
-              dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
-              # dpg.add_separator()
-
-              # Import button
-              with dpg.group(horizontal=True):
-                dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
-                dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
-              # Save button
-              with dpg.group(horizontal=True):
-                dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
-                # with modal
-                dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
-                colorize_button("export button", (0,128,128,255))
-                # without modal
-                dpg.add_button(label="Save Changes", callback=export_callback, tag="export button noprompt", show=False)
-                colorize_button("export button noprompt", (0,128,128,255))
-                dpg.add_button(label="No Changes To Save", callback=export_callback, tag="no export button", show=False)
-              # Revert button
-              with dpg.group(horizontal=True):
-                dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
-                dpg.add_button(label="Revert Changes", callback=revert_callback, tag="revert button", show=False)
-                colorize_button("revert button", (128,64,64,255))
-                dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag="no revert button", show=False)
-              # Copy Button
-              with dpg.group(horizontal=True):
-                dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
-                dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
-              # Paste Button
-              with dpg.group(horizontal=True, tag="paste box"):
-                dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
-                dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
-                dpg.add_text("", tag="paste filename")
-              # Translate Button
-              with dpg.group(horizontal=True, tag="translate box"):
-                dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
-                dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
-                # dpg.add_text("", tag="paste filename")
+            # Import button
+            # with dpg.group(horizontal=True):
+            #   dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
+            #   dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
+            # Save button
+            with dpg.group(horizontal=True):
+              dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
+              # with modal
+              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
+              colorize_button("export button", (0,128,128,255))
+              # without modal
+              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button noprompt", show=False)
+              colorize_button("export button noprompt", (0,128,128,255))
+              dpg.add_button(label="No Changes To Save", callback=export_callback, tag="no export button", show=False)
+            # Revert button
+            with dpg.group(horizontal=True):
+              dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
+              dpg.add_button(label="Revert Changes", callback=revert_callback, tag="revert button", show=False)
+              colorize_button("revert button", (128,64,64,255))
+              dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag="no revert button", show=False)
+            # Copy Button
+            with dpg.group(horizontal=True):
+              dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
+              dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
+            # Paste Button
+            with dpg.group(horizontal=True, tag="paste box"):
+              dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
+              dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
+              dpg.add_text("", tag="paste filename")
+            # Translate Button
+            with dpg.group(horizontal=True, tag="translate box"):
+              dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
+              dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
+              # dpg.add_text("", tag="paste filename")
 
         # Set up the main drawing list
         with dpg.drawlist(width=1, height=1, tag="drawlist"):
