@@ -145,7 +145,7 @@ class BetterListBox:
         self.visible_items = []
         sel_is_visible = True
         for i, item in enumerate(self.items):
-          show = (dpg.get_item_label(item).startswith(query))
+          show = (query in dpg.get_item_label(item))
           dpg.configure_item(item, show=show)
           if show:
             self.visible_items.append(i)
