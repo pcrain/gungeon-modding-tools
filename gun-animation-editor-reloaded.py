@@ -4,10 +4,6 @@
 #  Manually install missing packages with:
 #    pip install --user --break-system-packages dearpygui numpy pillow screeninfo
 
-# Todo:
-#   - figure out previewing indexed color images
-#   - hand previews
-
 import os, sys, subprocess, shlex, json, array, importlib, re, datetime, shutil
 from collections import namedtuple
 
@@ -885,6 +881,13 @@ def main(filename):
   load_scaled_image(HAND_IMAGE_PATH)
   load_scaled_image(OFF_IMAGE_PATH)
 
+  # Load fonts
+  # FONT_PATH = "/xmedia/bigbois/texmf-dist/fonts/truetype/public/gnu-freefont/FreeMonoBold.ttf"
+  # if os.path.exists(FONT_PATH):
+  #   with dpg.font_registry():
+  #     default_font = dpg.add_font(FONT_PATH, 13)
+  #   dpg.bind_font(default_font)
+
   # Set up the main window
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
@@ -894,11 +897,22 @@ def main(filename):
         with dpg.group(horizontal=True, tag="findbarandbutton") as findwidgetgroup:
           dpg.add_button(label="Open", callback=open_import_dialog, tag="import button", show=True)
           dpg.add_button(label="Refresh", callback=lambda: refresh_file_list(), tag=f"refresh files")
+          dpg.add_button(label="Options", callback=lambda: dpg.configure_item("editor options", show=not dpg.is_item_visible("editor options")), tag=f"toggle options")
+        with dpg.group(horizontal=False, tag="editor options", show=False):
+          # dpg.add_separator()
+          dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
+          # no easy way to get this to work with listpicker, so hidden by default
+          dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
+          dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
+          dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
+          dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
+          dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
+          dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
         #   dpg.add_button(label="F6", width=64, height=64, callback=lambda: print(""), tag=f"ding files")
-        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", width=256, callback=filter_files, tag="file search box") # can't set size???
+        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", width=300, callback=filter_files, tag="file search box") # can't set size???
         # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
         # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
-        file_box = BetterListBox(items=[], width=256, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
+        file_box = BetterListBox(items=[], width=300, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
 
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
@@ -927,17 +941,6 @@ def main(filename):
 
           # Set up our config / import / export / copy buttons
           with dpg.group(horizontal=False, tag="file controls"):
-            # dpg.add_separator()
-            dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
-            # no easy way to get this to work with listpicker, so hidden by default
-            dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
-            dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
-            dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
-            dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
-            dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
-            dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
-            # dpg.add_separator()
-
             # Import button
             # with dpg.group(horizontal=True):
             #   dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
