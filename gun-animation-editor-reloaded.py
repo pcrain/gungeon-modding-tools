@@ -87,6 +87,7 @@ jconf = {
   "show_hands"        : True,
   "make_backups"      : True,
   "use_jtk2d"         : True,
+  "autoscroll"        : False,
   "last_file"         : None,
 }
 
@@ -101,6 +102,7 @@ class BetterListBox:
     width                 = None
     height                = None
     parent                = None
+    force_autoscroll      = False
 
     cur_index             = 0
 
@@ -161,12 +163,15 @@ class BetterListBox:
         dpg.bind_item_theme(self.items[self.cur_index], self.button_normal_theme)
         self.cur_index = self.items.index(sender)
         dpg.bind_item_theme(sender, self.button_selected_theme)
-        dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
+        if get_config("autoscroll") or self.force_autoscroll:
+          self.force_autoscroll = False
+          dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
 
     def scroll_to_specific_item(self, itemname):
         truename = os.path.basename(itemname).replace(pref_ext(), "").replace(alt_ext() ,"")
         for item in self.items:
           if dpg.get_item_label(item) == truename:
+            self.force_autoscroll = True
             self.scroll_and_invoke_callback(item)
             break
 
@@ -925,6 +930,7 @@ def main(filename):
               dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
               dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
               dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
+              dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
               # dpg.add_separator()
 
               # Import button
