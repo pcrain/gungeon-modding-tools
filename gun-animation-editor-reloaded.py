@@ -702,7 +702,7 @@ def open_import_dialog():
       dpg.delete_item("import keyboard handler")
     dpg.delete_item("import dialog")
   with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
-    dpg.add_file_extension("Gungeon Data files {.png, .json, .jtk2d}", color=(0, 255, 255, 255))
+    dpg.add_file_extension("Gungeon Data files {.png,.json,.jtk2d}", color=(0, 255, 255, 255))
     dpg.add_file_extension(".png", color=(255, 255, 0, 255))
     dpg.add_file_extension(pref_ext(), color=(255, 0, 255, 255))
     dpg.add_file_extension(alt_ext(), color=(255, 0, 255, 255))
