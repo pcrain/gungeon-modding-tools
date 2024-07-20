@@ -51,10 +51,10 @@ LIST_ITEM_HEIGHT  = 18 # estimated through experimentation
 CachedImage = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
 AttachPoint = namedtuple('AttachPoint', ['name', 'tag_base', 'internal_name', 'color', 'shortcut', 'enabled_default'])
 _attach_points = [
-  AttachPoint(" Main Hand","main hand", "PrimaryHand",   (255, 255,   0, 255), "Left Click",          ENABLED_STRING ),
-  AttachPoint("  Off Hand","off hand",  "SecondaryHand", (255,   0, 255, 255), "Right Click",         DISABLED_STRING),
-  AttachPoint("      Clip","clip",      "Clip",          (128, 255, 255, 255), "Shift + Left Click",  DISABLED_STRING),
-  AttachPoint("    Casing","casing",    "Casing",        (  0, 255,   0, 255), "Shift + Right Click", ENABLED_STRING),
+  AttachPoint(" Main Hand", "main hand", "PrimaryHand",   (255, 255,   0, 255), "Left Click",          ENABLED_STRING ),
+  AttachPoint("  Off Hand", "off hand",  "SecondaryHand", (255,   0, 255, 255), "Right Click",         DISABLED_STRING),
+  AttachPoint("      Clip", "clip",      "Clip",          (128, 255, 255, 255), "Shift + Left Click",  DISABLED_STRING),
+  AttachPoint("    Casing", "casing",    "Casing",        (  0, 255,   0, 255), "Shift + Right Click", ENABLED_STRING),
 ]
 _attach_point_dict   = { p.name : p for p in _attach_points}
 _attach_point_coords = { p.name : (0,0) for p in _attach_points}
@@ -531,7 +531,7 @@ def toggle_element(element, override=None):
   new_enabled = (not cur_enabled) if override is None else override
   dpg.configure_item(f"{element} x box", show=new_enabled)
   dpg.configure_item(f"{element} y box", show=new_enabled)
-  dpg.configure_item(f"{element} shortcut box", show=new_enabled)
+  dpg.configure_item(f"{element} shortcut box", show=new_enabled) #
   dpg.set_item_label(f"{element} enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
   colorize_button(f"{element} enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
 
@@ -855,6 +855,13 @@ def hide_translate_modal():
 def control_pressed():
   return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
+def toggle_advanced_view():
+  newadvanced = not dpg.is_item_visible("advanced controls")
+  dpg.configure_item("advanced controls", show=newadvanced)
+  dpg.configure_item("advanced metadata", show=newadvanced)
+  dpg.configure_item("toggle advanced", label="Advanced View" if newadvanced else "Basic View")
+  pass
+
 def main(filename):
   global orig_width, orig_height, file_box
 
@@ -898,6 +905,7 @@ def main(filename):
           dpg.add_button(label="Open", callback=open_import_dialog, tag="import button", show=True)
           dpg.add_button(label="Refresh", callback=lambda: refresh_file_list(), tag=f"refresh files")
           dpg.add_button(label="Options", callback=lambda: dpg.configure_item("editor options", show=not dpg.is_item_visible("editor options")), tag=f"toggle options")
+          dpg.add_button(label="Basic View", callback=toggle_advanced_view, tag="toggle advanced", show=True)
         with dpg.group(horizontal=False, tag="editor options", show=False):
           # dpg.add_separator()
           dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
@@ -920,9 +928,10 @@ def main(filename):
         with dpg.group(horizontal=True, tag="info bar"):
           # Set up our control box
           with dpg.group(horizontal=False, tag="controls"):
-            dpg.add_text(f"Working Dir: ", tag="image path")
-            dpg.add_text(f"Image Name:  ", tag="image name")
-            dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
+            with dpg.group(horizontal=False, tag="advanced metadata", show=False):
+              dpg.add_text(f"Working Dir: ", tag="image path")
+              dpg.add_text(f"Image Name:  ", tag="image name")
+              dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
             for p in _attach_points:
               generate_controls(p)
             dpg.add_text(f"")
@@ -940,7 +949,7 @@ def main(filename):
               dpg.add_text(f" Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
 
           # Set up our config / import / export / copy buttons
-          with dpg.group(horizontal=False, tag="file controls"):
+          with dpg.group(horizontal=False, tag="advanced controls", show=False):
             # Import button
             # with dpg.group(horizontal=True):
             #   dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
