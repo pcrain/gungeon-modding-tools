@@ -59,6 +59,7 @@ _attach_points = [
 _attach_point_dict   = { p.name : p for p in _attach_points}
 _attach_point_coords = { p.name : (0,0) for p in _attach_points}
 _active_attach_point = _attach_points[0]
+_advanced_view_active = False;
 
 #Globals that should probably be refactored
 orig_width         = 0
@@ -84,6 +85,7 @@ jconf = {
   "make_backups"      : True,
   "use_jtk2d"         : True,
   "autoscroll"        : False,
+  "high_dpi"          : False,
   "last_file"         : None,
 }
 
@@ -526,11 +528,11 @@ def change_active_attach_point(sender, app_data):
   global _active_attach_point
   _active_attach_point = _attach_point_dict[app_data]
 
-def toggle_element(element, override=None):
+def toggle_element(element, override=None, refresh=False):
   cur_enabled = dpg.get_item_label(f"{element} enabled") == ENABLED_STRING
-  new_enabled = (not cur_enabled) if override is None else override
-  dpg.configure_item(f"{element} x box", show=new_enabled)
-  dpg.configure_item(f"{element} y box", show=new_enabled)
+  new_enabled = cur_enabled if refresh else (not cur_enabled) if override is None else override
+  dpg.configure_item(f"{element} x box", show=new_enabled and _advanced_view_active)
+  dpg.configure_item(f"{element} y box", show=new_enabled and _advanced_view_active)
   dpg.configure_item(f"{element} shortcut box", show=new_enabled) #
   dpg.set_item_label(f"{element} enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
   colorize_button(f"{element} enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
@@ -547,6 +549,11 @@ def toggle_animation(override=None):
   animation_on = new_enabled
   dpg.set_item_label(f"animation enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
   colorize_button(f"animation enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
+  dpg.configure_item(f"fps --", show=new_enabled) #
+  dpg.configure_item(f"fps -", show=new_enabled) #
+  dpg.configure_item(f"animation fps", show=new_enabled) #
+  dpg.configure_item(f"fps +", show=new_enabled) #
+  dpg.configure_item(f"fps ++", show=new_enabled) #
 
 def generate_controls(p):
   name = p.name
@@ -741,6 +748,10 @@ def toggle_backups(switch, value):
 def toggle_jtk2d(switch, value):
   set_config("use_jtk2d", value)
 
+def toggle_high_dpi(switch, value):
+  set_config("high_dpi", value)
+  dpg.set_global_font_scale(2.0 if value else 1.0)
+
 def next_file(delta):
   file_box.change_item(delta)
 
@@ -856,11 +867,12 @@ def control_pressed():
   return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
 def toggle_advanced_view():
-  newadvanced = not dpg.is_item_visible("advanced controls")
-  dpg.configure_item("advanced controls", show=newadvanced)
-  dpg.configure_item("advanced metadata", show=newadvanced)
-  dpg.configure_item("toggle advanced", label="Advanced View" if newadvanced else "Basic View")
-  pass
+  global _advanced_view_active
+  _advanced_view_active = not dpg.is_item_visible("advanced controls")
+  dpg.configure_item("advanced controls", show=_advanced_view_active)
+  dpg.configure_item("toggle advanced", label="Advanced View" if _advanced_view_active else "Basic View")
+  for p in _attach_points:
+    toggle_element(p.tag_base, refresh=True)
 
 def main(filename):
   global orig_width, orig_height, file_box
@@ -892,7 +904,7 @@ def main(filename):
   # FONT_PATH = "/xmedia/bigbois/texmf-dist/fonts/truetype/public/gnu-freefont/FreeMonoBold.ttf"
   # if os.path.exists(FONT_PATH):
   #   with dpg.font_registry():
-  #     default_font = dpg.add_font(FONT_PATH, 13)
+  #     default_font = dpg.add_font(FONT_PATH, 30)
   #   dpg.bind_font(default_font)
 
   # Set up the main window
@@ -916,6 +928,7 @@ def main(filename):
           dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
           dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
           dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
+          dpg.add_checkbox(label="High DPI Display (beta)", callback=toggle_high_dpi, tag="config high_dpi")
         #   dpg.add_button(label="F6", width=64, height=64, callback=lambda: print(""), tag=f"ding files")
         dpg.add_input_text(hint="Click here or Ctrl+F to filter files", width=300, callback=filter_files, tag="file search box") # can't set size???
         # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
@@ -928,32 +941,25 @@ def main(filename):
         with dpg.group(horizontal=True, tag="info bar"):
           # Set up our control box
           with dpg.group(horizontal=False, tag="controls"):
-            with dpg.group(horizontal=False, tag="advanced metadata", show=False):
-              dpg.add_text(f"Working Dir: ", tag="image path")
-              dpg.add_text(f"Image Name:  ", tag="image name")
-              dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
             for p in _attach_points:
               generate_controls(p)
-            dpg.add_text(f"")
+            # dpg.add_text(f"")
             with dpg.group(horizontal=True, tag=f"animation controls"):
               dpg.add_text(f" Animation: ")
               dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
               colorize_button(f"animation enabled", DISABLED_COLOR)
-              dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --")
-              dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -")
-              dpg.add_text(f"{animation_speed} FPS", tag="animation fps")
-              dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +")
-              dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++")
-              # dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
-              # dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
-              dpg.add_text(f" Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
+              dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --", show=False)
+              dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -", show=False)
+              dpg.add_text(f"{animation_speed} FPS", tag="animation fps", show=False)
+              dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +", show=False)
+              dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++", show=False)
+              dpg.add_text(f"Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
 
           # Set up our config / import / export / copy buttons
           with dpg.group(horizontal=False, tag="advanced controls", show=False):
-            # Import button
-            # with dpg.group(horizontal=True):
-            #   dpg.add_text("Ctrl+O", color=SHORTCUT_COLOR)
-            #   dpg.add_button(label="Import / Edit Gun Data", callback=open_import_dialog, tag="import button", show=True)
+            dpg.add_text(f"Working Dir: ", tag="image path")
+            dpg.add_text(f"Image Name:  ", tag="image name")
+            dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
             # Save button
             with dpg.group(horizontal=True):
               dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
