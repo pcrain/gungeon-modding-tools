@@ -86,6 +86,7 @@ jconf = {
   "autosave"          : True,
   "show_hands"        : True,
   "make_backups"      : True,
+  "use_jtk2d"         : True,
   "last_file"         : None,
 }
 
@@ -163,7 +164,7 @@ class BetterListBox:
         dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
 
     def scroll_to_specific_item(self, itemname):
-        truename = os.path.basename(itemname).replace(".json","")
+        truename = os.path.basename(itemname).replace(pref_ext(), "").replace(alt_ext() ,"")
         for item in self.items:
           if dpg.get_item_label(item) == truename:
             self.scroll_and_invoke_callback(item)
@@ -259,11 +260,21 @@ def clear_unsaved_changes():
   dpg.configure_item("no export button", show=True)
   dpg.configure_item("no revert button", show=True)
 
+def pref_ext(): # preferred file extension
+  if get_config("use_jtk2d"):
+    return ".jtk2d"
+  return ".json"
+
+def alt_ext(): # alternate file extension
+  if get_config("use_jtk2d"):
+    return ".json"
+  return ".jtk2d"
+
 def enable_save_modal():
   if dpg.does_item_exist("save modal"):
     return # no need to enable a modal that's already enabled
 
-  export_path = os.path.join(current_dir,current_file).replace(".png",".json")
+  export_path = os.path.join(current_dir,current_file).replace(".png", pref_ext())
   if not os.path.exists(export_path):
     return # no need for a modal if we're saving to a new file
 
@@ -382,7 +393,7 @@ def export_callback():
   if not unsaved_changes:
     return # no changes since last export
 
-  export_path = os.path.join(current_dir,current_file).replace(".png",".json")
+  export_path = os.path.join(current_dir,current_file).replace(".png", pref_ext())
   with open(export_path,'w') as fout:
     fout.write(json.dumps(get_json_for_current_gun(),indent=2))
   # subprocess.Popen(shlex.split(f"subl {export_path}"))
@@ -397,7 +408,9 @@ def revert_callback():
   clear_unsaved_changes()
   fullpath = os.path.join(current_dir, current_file)
   load_gun_image(fullpath)
-  jsonpath = fullpath.replace(".png",".json")
+  jsonpath = fullpath.replace(".png", pref_ext())
+  if not os.path.exists(jsonpath):
+    jsonpath = fullpath.replace(".png", alt_ext())
   if os.path.exists(jsonpath):
     load_json_from_file(jsonpath)
 
@@ -649,23 +662,27 @@ def set_current_file_from_import_dialog(sender, app_data):
   dpg.configure_item("import dialog", show=False)
 
   for _, filename in app_data.get("selections",{}).items():
-    stem = filename.replace(".json","").replace(".png","")
+    stem = filename.replace(pref_ext(), "").replace(alt_ext(), "").replace(".png","")
     break
 
   if not os.path.exists(f"{stem}.png"):
     return
 
   load_gun_image(f"{stem}.png")
-  if os.path.exists(f"{stem}.json"):
-    load_json_from_file(f"{stem}.json")
+  if os.path.exists(f"{stem}{pref_ext()}"):
+    load_json_from_file(f"{stem}{pref_ext()}")
+  elif os.path.exists(f"{stem}{alt_ext()}"):
+    load_json_from_file(f"{stem}{alt_ext()}")
   file_box.scroll_to_specific_item(f"{stem}")
 
 def set_current_file_from_picker_box(sender, file_stem):
   fullpath = os.path.join(current_dir, file_stem)
   if os.path.exists(f"{fullpath}.png"):
     load_gun_image(f"{fullpath}.png")
-    if os.path.exists(f"{fullpath}.json"):
-      load_json_from_file(f"{fullpath}.json")
+    if os.path.exists(f"{fullpath}{pref_ext()}"):
+      load_json_from_file(f"{fullpath}{pref_ext()}")
+    if os.path.exists(f"{fullpath}{alt_ext()}"):
+      load_json_from_file(f"{fullpath}{alt_ext()}")
     clear_unsaved_changes()
 
 def open_import_dialog():
@@ -674,9 +691,10 @@ def open_import_dialog():
       dpg.delete_item("import keyboard handler")
     dpg.delete_item("import dialog")
   with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
-    dpg.add_file_extension("Gungeon Data files {.png,.json}", color=(0, 255, 255, 255))
+    dpg.add_file_extension("Gungeon Data files {.png, .json, .jtk2d}", color=(0, 255, 255, 255))
     dpg.add_file_extension(".png", color=(255, 255, 0, 255))
-    dpg.add_file_extension(".json", color=(255, 0, 255, 255))
+    dpg.add_file_extension(pref_ext(), color=(255, 0, 255, 255))
+    dpg.add_file_extension(alt_ext(), color=(255, 0, 255, 255))
     with dpg.handler_registry(tag="import keyboard handler"):
       dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item("import dialog", show=False))
       dpg.add_key_release_handler(key=dpg.mvKey_Return, callback=lambda: set_current_file_from_import_dialog(None, dpg.get_file_dialog_info("import dialog")))
@@ -716,6 +734,9 @@ def toggle_hands(switch, value):
 def toggle_backups(switch, value):
   set_config("make_backups", value)
 
+def toggle_jtk2d(switch, value):
+  set_config("use_jtk2d", value)
+
 def next_file(delta):
   file_box.change_item(delta)
 
@@ -730,7 +751,9 @@ def change_animation_speed(delta):
 
 def show_translate_modal():
   toggle_animation(False)
-  cur_json = os.path.join(current_dir,current_file.replace(".png",".json"))
+  cur_json = os.path.join(current_dir,current_file.replace(".png", pref_ext()))
+  if not os.path.exists(cur_json):
+    cur_json = os.path.join(current_dir,current_file.replace(".png", alt_ext()))
   if not os.path.exists(cur_json):
     return # bail out if we the current json doesn't exist
 
@@ -763,7 +786,7 @@ def show_translate_modal():
     label = dpg.get_item_label(item)
     if file_box.get_animation_root(label) != root_name:
       continue
-    jpath = os.path.join(current_dir,f"{label}.json")
+    jpath = os.path.join(current_dir,f"{label}{pref_ext()}")
     if not os.path.exists(jpath):
       continue
     jsons.append(jpath)
@@ -816,7 +839,7 @@ def translate_jsons(jsons):
 
   # Hide the modal and reload the current gun's JSON
   hide_translate_modal()
-  load_json_from_file(os.path.join(current_dir,current_file.replace(".png",".json")))
+  load_json_from_file(os.path.join(current_dir,current_file.replace(".png",pref_ext())))
 
 def hide_translate_modal():
   if dpg.does_item_exist("translate keyboard handler"):
@@ -847,7 +870,7 @@ def main(filename):
 
   # Set up dearpygui
   dpg.create_context()
-  dpg.create_viewport(title='Enter the Gungeon - Gun JSON editor', x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
+  dpg.create_viewport(title='Enter the Gungeon - Gun Animation Editor Reloaded', x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
   dpg.setup_dearpygui()
 
   # Load necessary assets
@@ -901,6 +924,7 @@ def main(filename):
               dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
               dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
               dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
+              dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
               # dpg.add_separator()
 
               # Import button
@@ -985,7 +1009,10 @@ def main(filename):
       filename = None
   if filename is not None:
     load_gun_image(filename)
-    if os.path.exists(jf := filename.replace(".png",".json")):
+    if os.path.exists(jf := filename.replace(".png", pref_ext())):
+      load_json_from_file(jf)
+      last_file = jf
+    elif os.path.exists(jf := filename.replace(".png", alt_ext())):
       load_json_from_file(jf)
       last_file = jf
   else:
