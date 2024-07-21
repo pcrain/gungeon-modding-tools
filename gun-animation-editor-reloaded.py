@@ -70,6 +70,7 @@ GUN_LAYER_TAG = "gun layer"
 IMPORT_DIALOG_TAG = "import dialog"
 IMPORT_HANDLER_TAG = "import keyboard handler"
 FILE_WIDGET_TAG = "filewidget"
+PASTE_OPTIONS_TAG = "paste options"
 
 # Misc
 ENABLED_STRING    = " Enabled" #note the space
@@ -379,10 +380,11 @@ def copy_state():
   global clipboard, clipboard_file
   clipboard = get_json_for_current_gun()
   dpg.set_value(PASTE_FILENAME_TAG, f"from {current_file}")
+  dpg.configure_item(PASTE_OPTIONS_TAG, show=True)
 
 def paste_state():
   if clipboard is not None:
-    load_json_from_dict(clipboard)
+    load_json_from_dict(clipboard, pasted=True)
     mark_unsaved_changes()
 
 def colorize_last_button(color):
@@ -458,6 +460,7 @@ def apc_x(p)        : return f"{p.tag_base} x box"
 def apc_y(p)        : return f"{p.tag_base} y box"
 def apc_layer(p)    : return f"{p.tag_base} layer"
 def apc_circle(p)   : return f"{p.tag_base} circle"
+def apc_paste(p)    : return f"{p.tag_base} paste"
 
 def get_json_for_current_gun():
   basejson = get_basic_gun_json(orig_width, orig_height)
@@ -718,12 +721,17 @@ def update_file_list(filelist):
     # dpg.configure_item(FILE_PICKER_TAG, items=filelist, default_value=current_file.replace(".png",""))
     file_box.replace_items(filelist)
 
-def load_json_from_dict(jdata):
+def paste_enabled(p):
+  return dpg.get_value(apc_paste(p))
+
+def load_json_from_dict(jdata, pasted=False):
   midx = (jdata.get("width", 0) // 2) / 16.0
   midy = (jdata.get("height", 0) // 2) / 16.0
   jpoints = jdata.get("attachPoints", [])
   # Temporarily disable all previews
   for p in _attach_points:
+    if pasted and (not paste_enabled(p)):
+      continue
     toggle_attach_point(p, override=True)
     found = False
     for a in jpoints:
@@ -972,8 +980,20 @@ def hide_translate_modal():
 def control_pressed():
   return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
+def item_or_child_focused(t):
+  state = dpg.get_item_state(t)
+  if state.get("focused", False):
+    return True
+  for k,v in dpg.get_item_children(t).items():
+    for child in v:
+      if item_or_child_focused(child):
+        return True
+  return False
+
 def no_modal_open():
-  return dpg.get_item_state(MAIN_WINDOW_TAG)["focused"]
+  return item_or_child_focused(MAIN_WINDOW_TAG)
+  # print(dpg.get_item_state(MAIN_WINDOW_TAG))
+  # return dpg.get_item_state(MAIN_WINDOW_TAG)["focused"]
 
 def toggle_advanced_view():
   global _advanced_view_active
@@ -1089,6 +1109,10 @@ def main(filename):
               dpg.add_button(label="Revert Changes", callback=revert_callback, tag=REVERT_BUTTON_TAG, show=False)
               colorize_button(REVERT_BUTTON_TAG, (128,64,64,255))
               dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag=NO_REVERT_BUTTON_TAG, show=False)
+            # Translate Button
+            with dpg.group(horizontal=True, tag="translate box"):
+              dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
+              dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
             # Copy Button
             with dpg.group(horizontal=True):
               dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
@@ -1098,10 +1122,11 @@ def main(filename):
               dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
               dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
               dpg.add_text("", tag=PASTE_FILENAME_TAG)
-            # Translate Button
-            with dpg.group(horizontal=True, tag="translate box"):
-              dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
+            with dpg.group(horizontal=False, tag=PASTE_OPTIONS_TAG, show=False):
+              for p in _attach_points:
+                with dpg.group(horizontal=True, tag=f"{p.tag_base} option container", show=True):
+                  dpg.add_checkbox(label=f"Paste", indent=16, default_value=True, tag=apc_paste(p))
+                  dpg.add_text(p.name.strip(), color=p.color)
 
         # Set up the main drawing list
         with dpg.drawlist(width=1, height=1, tag=DRAWLIST_TAG):
