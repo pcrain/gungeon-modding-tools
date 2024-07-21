@@ -26,6 +26,8 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 PROGRAM_NAME      = "gun-animation-editor-reloaded"
+PROGRAM_TITLE     = "Gun Animation Editor Reloaded"
+PROGRAM_VERSION   = "0.9.1"
 TEST_IMAGE_2      = "/home/pretzel/uploads/omitb-gun-sprites-jsons/alphabeam_idle_003.png"
 PREVIEW_SCALE     = 8 # magnification factor for preview
 PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
@@ -913,7 +915,7 @@ def main(filename):
 
   # Set up dearpygui
   dpg.create_context()
-  dpg.create_viewport(title='Enter the Gungeon - Gun Animation Editor Reloaded', x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
+  dpg.create_viewport(title=f"Enter the Gungeon - {PROGRAM_TITLE} - v{PROGRAM_VERSION}", x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
   dpg.setup_dearpygui()
 
   # Load necessary assets

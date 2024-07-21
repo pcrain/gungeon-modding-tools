@@ -8,4 +8,4 @@ wine C:/Python312/Scripts/pyinstaller.exe \
   --onefile \
   --add-data=hand_main.png:. \
   --add-data=hand_off.png:. \
-  gungeon-gun-sprite-json-creator.py
+  gun-animation-editor-reloaded.py
