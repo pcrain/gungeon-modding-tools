@@ -25,20 +25,46 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+# Core
 PROGRAM_NAME      = "gun-animation-editor-reloaded"
 PROGRAM_TITLE     = "Gun Animation Editor Reloaded"
 PROGRAM_VERSION   = "0.9.1"
-TEST_IMAGE_2      = "/home/pretzel/uploads/omitb-gun-sprites-jsons/alphabeam_idle_003.png"
 PREVIEW_SCALE     = 8 # magnification factor for preview
 PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
 
+# Tags
+FILE_PICKER_TAG            = "file picker box"
+PREVIEW_IMAGE_TAG          = "preview_image"
+HAND_IMAGE_TAG             = "hand_image"
+OFF_IMAGE_TAG              = "hand_off"
+FILE_SEARCH_BOX_TAG        = "file search box"
+ANIMATION_ENABLED_TAG      = "animation enabled"
+TOGGLE_ADVANCED_TAG        = "toggle advanced"
+TOGGLE_OPTIONS_TAG         = "toggle options"
+EDITOR_OPTIONS_TAG         = "editor options"
+ADVANCED_CONTROLS_TAG      = "advanced controls"
+IMAGE_PATH_TAG             = "image path"
+IMAGE_NAME_TAG             = "image name"
+IMAGE_SIZE_TAG             = "image size"
+EXPORT_BUTTON_NP_TAG       = "export button noprompt"
+EXPORT_BUTTON_TAG          = "export button"
+NO_EXPORT_BUTTON_TAG       = "no export button"
+REVERT_BUTTON_TAG          = "revert button"
+NO_REVERT_BUTTON_TAG       = "no revert button"
+PASTE_FILENAME_TAG         = "paste filename"
+DRAWLIST_TAG               = "drawlist"
+DRAWLIST_CLICK_HANDLER_TAG = "drawlist click handler"
+SAVE_MODAL_TAG             = "save modal"
+ANIMATION_FPS_TAG          = "animation fps"
+FPS_UP1_TAG                = "fps +"
+FPS_UP2_TAG                = "fps ++"
+FPS_DOWN1_TAG              = "fps -"
+FPS_DOWN2_TAG              = "fps --"
+
+# Misc
 ENABLED_STRING    = " Enabled" #note the space
 DISABLED_STRING   = "Disabled"
-FILE_PICKER_TAG   = "file picker box"
-PREVIEW_IMAGE_TAG = "preview_image"
-HAND_IMAGE_TAG    = "hand_image"
 HAND_IMAGE_PATH   = resource_path("hand_main.png")
-OFF_IMAGE_TAG     = "hand_off"
 OFF_IMAGE_PATH    = resource_path("hand_off.png")
 ENABLED_COLOR     = (64, 128, 64, 255)
 DISABLED_COLOR    = (64, 0, 0, 255)
@@ -48,7 +74,6 @@ THIN_WHITE        = (255, 255, 255, 64)
 DRAWLIST_PAD      = 64
 WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
-LIST_ITEM_HEIGHT  = 18 # estimated through experimentation
 
 CachedImage = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
 AttachPoint = namedtuple('AttachPoint', ['name', 'tag_base', 'internal_name', 'color', 'shortcut', 'enabled_default'])
@@ -79,17 +104,17 @@ file_box           = None
 animation_on       = False
 animation_speed    = 30
 
-#Config globals
+#Config globals and defaults
 jconf = {
-  "no_warn_overwrite" : True,
-  "no_warn_switch"    : True,
-  "autosave"          : True,
-  "show_hands"        : True,
-  "make_backups"      : True,
-  "use_jtk2d"         : True,
-  "autoscroll"        : False,
-  "high_dpi"          : False,
-  "last_file"         : None,
+  (NO_WARN_OVERWRITE := "no_warn_overwrite") : True,
+  (NO_WARN_SWITCH    := "no_warn_switch")    : True,
+  (AUTOSAVE          := "autosave")          : True,
+  (SHOW_HANDS        := "show_hands")        : True,
+  (MAKE_BACKUPS      := "make_backups")      : True,
+  (USE_JTK2D         := "use_jtk2d")         : True,
+  (AUTOSCROLL        := "autoscroll")        : False,
+  (HIGH_DPI          := "high_dpi")          : False,
+  (LAST_FILE         := "last_file")         : None,
 }
 
 class BetterListBox:
@@ -164,7 +189,7 @@ class BetterListBox:
         dpg.bind_item_theme(self.items[self.cur_index], self.button_normal_theme)
         self.cur_index = self.items.index(sender)
         dpg.bind_item_theme(sender, self.button_selected_theme)
-        if get_config("autoscroll") or self.force_autoscroll:
+        if get_config(AUTOSCROLL) or self.force_autoscroll:
           self.force_autoscroll = False
           dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
 
@@ -231,8 +256,11 @@ def load_config():
     jconf.update(json.load(fin))
 
   for k, v in jconf.items():
-    if dpg.does_item_exist(f"config {k}"):
-      dpg.set_value(f"config {k}", v)
+    if dpg.does_item_exist(config_tag(k)):
+      dpg.set_value(config_tag(k), v)
+
+def config_tag(key):
+  return f"config {key}"
 
 def get_config(key):
   return jconf.get(key,False)
@@ -249,54 +277,54 @@ def mark_unsaved_changes():
   global unsaved_changes
   unsaved_changes = True
   enable_save_modal()
-  if get_config("no_warn_overwrite"):
-    dpg.configure_item("export button noprompt", show=True)
-    dpg.configure_item("export button", show=False)
+  if get_config(NO_WARN_OVERWRITE):
+    dpg.configure_item(EXPORT_BUTTON_NP_TAG, show=True)
+    dpg.configure_item(EXPORT_BUTTON_TAG, show=False)
   else:
-    dpg.configure_item("export button noprompt", show=False)
-    dpg.configure_item("export button", show=True)
-  dpg.configure_item("revert button", show=True)
-  dpg.configure_item("no export button", show=False)
-  dpg.configure_item("no revert button", show=False)
+    dpg.configure_item(EXPORT_BUTTON_NP_TAG, show=False)
+    dpg.configure_item(EXPORT_BUTTON_TAG, show=True)
+  dpg.configure_item(REVERT_BUTTON_TAG, show=True)
+  dpg.configure_item(NO_EXPORT_BUTTON_TAG, show=False)
+  dpg.configure_item(NO_REVERT_BUTTON_TAG, show=False)
 
 def clear_unsaved_changes():
   global unsaved_changes
   unsaved_changes = False
   disable_save_modal()
-  dpg.configure_item("export button", show=False)
-  dpg.configure_item("export button noprompt", show=False)
-  dpg.configure_item("revert button", show=False)
-  dpg.configure_item("no export button", show=True)
-  dpg.configure_item("no revert button", show=True)
+  dpg.configure_item(EXPORT_BUTTON_TAG, show=False)
+  dpg.configure_item(EXPORT_BUTTON_NP_TAG, show=False)
+  dpg.configure_item(REVERT_BUTTON_TAG, show=False)
+  dpg.configure_item(NO_EXPORT_BUTTON_TAG, show=True)
+  dpg.configure_item(NO_REVERT_BUTTON_TAG, show=True)
 
 def pref_ext(): # preferred file extension
-  if get_config("use_jtk2d"):
+  if get_config(USE_JTK2D):
     return ".jtk2d"
   return ".json"
 
 def alt_ext(): # alternate file extension
-  if get_config("use_jtk2d"):
+  if get_config(USE_JTK2D):
     return ".json"
   return ".jtk2d"
 
 def enable_save_modal():
-  if dpg.does_item_exist("save modal"):
+  if dpg.does_item_exist(SAVE_MODAL_TAG):
     return # no need to enable a modal that's already enabled
 
   export_path = os.path.join(current_dir,current_file).replace(".png", pref_ext())
   if not os.path.exists(export_path):
     return # no need for a modal if we're saving to a new file
 
-  with dpg.popup("export button", modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag="save modal"):
+  with dpg.popup(EXPORT_BUTTON_TAG, modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag=SAVE_MODAL_TAG):
     dpg.add_text(f"Overwite existing file?\n  {export_path}")
     dpg.add_separator()
     with dpg.group(horizontal=True):
       dpg.add_button(label="Yes", width=75, callback=lambda: export_callback())
-      dpg.add_button(label="No", width=75, callback=lambda: dpg.configure_item("save modal", show=False))
+      dpg.add_button(label="No", width=75, callback=lambda: dpg.configure_item(SAVE_MODAL_TAG, show=False))
 
 def disable_save_modal():
-  if dpg.does_item_exist("save modal"):
-    dpg.delete_item("save modal")
+  if dpg.does_item_exist(SAVE_MODAL_TAG):
+    dpg.delete_item(SAVE_MODAL_TAG)
 
 def colorize_button(button, color = None):
   if color is None:
@@ -317,7 +345,7 @@ def colorize_button(button, color = None):
 def copy_state():
   global clipboard, clipboard_file
   clipboard = get_json_for_current_gun()
-  dpg.set_value("paste filename", f"from {current_file}")
+  dpg.set_value(PASTE_FILENAME_TAG, f"from {current_file}")
 
 def paste_state():
   if clipboard is not None:
@@ -424,9 +452,9 @@ def revert_callback():
     load_json_from_file(jsonpath)
 
 def pos_in_drawing_area(x, y):
-  dx, dy = dpg.get_item_rect_min("drawlist")
+  dx, dy = dpg.get_item_rect_min(DRAWLIST_TAG)
   dy -= DRAWLIST_PAD / 2 #TODO: not really sure why the rectangle above is offset...
-  dw, dh = dpg.get_item_rect_size("drawlist")
+  dw, dh = dpg.get_item_rect_size(DRAWLIST_TAG)
 
   # print(f"checking {x},{y} within {dx,dy}...{dx+dw},{dy+dh}")
   return x >= dx and x <= (dx+dw) and y >= dy and y <= (dy+dh)
@@ -452,14 +480,14 @@ def redraw_attach_point(p):
   layer = f"{p.tag_base} layer"
   if dpg.does_alias_exist(layer):
     dpg.delete_item(layer)
-  dpg.push_container_stack("drawlist")
+  dpg.push_container_stack(DRAWLIST_TAG)
   dpg.add_draw_layer(tag=layer)
   dpg.pop_container_stack()
 
   # Redraw the hand at the designated position
   dpg.push_container_stack(layer)
   center = _attach_point_coords[p.name]
-  if get_config("show_hands") and ("hand" in p.tag_base):
+  if get_config(SHOW_HANDS) and ("hand" in p.tag_base):
     # offset = center+preview_scale()*(DRAWLIST_PAD,DRAWLIST_PAD)
     offset = (center[0] - 2*preview_scale(), center[1] - 2*preview_scale())
     # dpg.draw_image(HAND_IMAGE_TAG, center=_attach_point_coords[p.name], tag=f"{p.tag_base} hand")
@@ -550,16 +578,16 @@ def toggle_element(element, override=None, refresh=False):
 
 def toggle_animation(override=None):
   global animation_on
-  cur_enabled = dpg.get_item_label(f"animation enabled") == ENABLED_STRING
+  cur_enabled = dpg.get_item_label(ANIMATION_ENABLED_TAG) == ENABLED_STRING
   new_enabled = (not cur_enabled) if override is None else override
   animation_on = new_enabled
-  dpg.set_item_label(f"animation enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
-  colorize_button(f"animation enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
-  dpg.configure_item(f"fps --", show=new_enabled) #
-  dpg.configure_item(f"fps -", show=new_enabled) #
-  dpg.configure_item(f"animation fps", show=new_enabled) #
-  dpg.configure_item(f"fps +", show=new_enabled) #
-  dpg.configure_item(f"fps ++", show=new_enabled) #
+  dpg.set_item_label(ANIMATION_ENABLED_TAG, ENABLED_STRING if new_enabled else DISABLED_STRING)
+  colorize_button(ANIMATION_ENABLED_TAG, ENABLED_COLOR if new_enabled else DISABLED_COLOR)
+  dpg.configure_item(FPS_DOWN2_TAG, show=new_enabled) #
+  dpg.configure_item(FPS_DOWN1_TAG, show=new_enabled) #
+  dpg.configure_item(ANIMATION_FPS_TAG, show=new_enabled) #
+  dpg.configure_item(FPS_UP1_TAG, show=new_enabled) #
+  dpg.configure_item(FPS_UP2_TAG, show=new_enabled) #
 
 def generate_controls(p):
   name = p.name
@@ -606,7 +634,7 @@ def load_gun_image(filename):
   global orig_width, orig_height, current_file, current_dir
 
   # Export our current image if we have unsaved changes and autosave is on
-  if unsaved_changes and get_config("autosave"):
+  if unsaved_changes and get_config(AUTOSAVE):
     export_callback()
 
   # Load and resize the image internally since pygui doesn't seem to support nearest neighbor scaling
@@ -620,14 +648,14 @@ def load_gun_image(filename):
   current_file = os.path.basename(filename)
 
   # Refresh all of our canvas and metadata data
-  dpg.set_value(f"image path", f"Working Dir: {current_dir}")
-  dpg.set_value(f"image name", f"Image Name:  {current_file}")
-  dpg.set_value(f"image size", f"Image Size:  {orig_width} x {orig_height} pixels")
-  dpg.configure_item("drawlist", width=DRAWLIST_PAD*2+scaled_width, height=DRAWLIST_PAD*2+scaled_height)
+  dpg.set_value(IMAGE_PATH_TAG, f"Working Dir: {current_dir}")
+  dpg.set_value(IMAGE_NAME_TAG, f"Image Name:  {current_file}")
+  dpg.set_value(IMAGE_SIZE_TAG, f"Image Size:  {orig_width} x {orig_height} pixels")
+  dpg.configure_item(DRAWLIST_TAG, width=DRAWLIST_PAD*2+scaled_width, height=DRAWLIST_PAD*2+scaled_height)
   layer_tag = f"gun layer"
   if dpg.does_alias_exist(layer_tag):
     dpg.delete_item(layer_tag)
-  dpg.push_container_stack("drawlist")
+  dpg.push_container_stack(DRAWLIST_TAG)
   with dpg.draw_layer(tag=layer_tag):
     #Draw outer border
     dpg.draw_rectangle((0,0), (DRAWLIST_PAD*2+scaled_width,DRAWLIST_PAD*2+scaled_height))
@@ -643,7 +671,7 @@ def load_gun_image(filename):
 
   load_json_from_dict(get_default_gun_json(orig_width, orig_height))
   clear_unsaved_changes()
-  set_config("last_file", filename)
+  set_config(LAST_FILE, filename)
 
 def update_file_list(filelist):
     # dpg.configure_item(FILE_PICKER_TAG, items=filelist, default_value=current_file.replace(".png",""))
@@ -732,18 +760,18 @@ def filter_files(_, query):
 
 def save_changes_from_shortcut():
   toggle_animation(False)
-  if jconf["no_warn_overwrite"]:
+  if jconf[NO_WARN_OVERWRITE]:
     export_callback()
   else:
     print("checking...")
-    if dpg.does_item_exist("save modal"):
+    if dpg.does_item_exist(SAVE_MODAL_TAG):
       # print("found modal")
-      dpg.configure_item("save modal", show=True)
+      dpg.configure_item(SAVE_MODAL_TAG, show=True)
     else:
       export_callback()
 
 def toggle_hands(switch, value):
-  set_config("show_hands", value)
+  set_config(SHOW_HANDS, value)
   am = _attach_point_dict[" Main Hand"]
   ao = _attach_point_dict["  Off Hand"]
   redraw_attach_point(am)
@@ -752,18 +780,18 @@ def toggle_hands(switch, value):
   #   toggle_element(p.tag_base, override=False)
 
 def toggle_backups(switch, value):
-  set_config("make_backups", value)
+  set_config(MAKE_BACKUPS, value)
 
 def toggle_jtk2d(switch, value):
-  set_config("use_jtk2d", value)
+  set_config(USE_JTK2D, value)
 
 def toggle_high_dpi(switch, value):
-  set_config("high_dpi", value)
+  set_config(HIGH_DPI, value)
   resize_gui(reload = True)
 
 def resize_gui(reload = False):
   global _gui_scale
-  _gui_scale = 2 if get_config("high_dpi") else 1
+  _gui_scale = 2 if get_config(HIGH_DPI) else 1
   dpg.set_global_font_scale(_gui_scale)
   dpg.configure_item("filewidget", width=_gui_scale * 300)
   if reload:
@@ -779,7 +807,7 @@ def change_animation_speed(delta):
     animation_speed = 1
   elif (animation_speed > 60):
     animation_speed = 60
-  dpg.set_value(f"animation fps", f"{animation_speed} FPS")
+  dpg.set_value(ANIMATION_FPS_TAG, f"{animation_speed} FPS")
 
 def show_translate_modal():
   toggle_animation(False)
@@ -824,12 +852,12 @@ def show_translate_modal():
     jsons.append(jpath)
 
   # create a modal dialog for translating all attach points corresponding to a sprite by the specified amount
-  with dpg.popup("export button", modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag="translate modal"):
+  with dpg.popup(EXPORT_BUTTON_TAG, modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag="translate modal"):
     dpg.add_text(f"Translating {len(jsons)} sprites matching:")
     dpg.add_text(f"{root_name}_###", color=(192,255,128))
     dpg.add_separator()
     # dpg.add_checkbox(label="Translate All Animations for This Gun", tag="translate all")
-    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=get_config("make_backups"))
+    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=get_config(MAKE_BACKUPS))
     dpg.add_input_float(label=f"x: {int(16 * (newx - oldx))}px", width=150, tag=f"translate x box", format="%.04f", step=1.0/16.0, default_value=(newx - oldx),
       callback=lambda: dpg.configure_item("translate x box", label=f"""x: {int(16 * dpg.get_value("translate x box"))}px"""))
     dpg.add_input_float(label=f"y: {int(16 * (newy - oldy))}px", width=150, tag=f"translate y box", format="%.04f", step=1.0/16.0, default_value=(newy - oldy),
@@ -885,16 +913,16 @@ def control_pressed():
 
 def toggle_advanced_view():
   global _advanced_view_active
-  _advanced_view_active = not dpg.is_item_visible("advanced controls")
-  dpg.configure_item("advanced controls", show=_advanced_view_active)
-  dpg.configure_item("toggle advanced", label="Show Basic View" if _advanced_view_active else "Show Advanced View")
+  _advanced_view_active = not dpg.is_item_visible(ADVANCED_CONTROLS_TAG)
+  dpg.configure_item(ADVANCED_CONTROLS_TAG, show=_advanced_view_active)
+  dpg.configure_item(TOGGLE_ADVANCED_TAG, label="Show Basic View" if _advanced_view_active else "Show Advanced View")
   for p in _attach_points:
     toggle_element(p.tag_base, refresh=True)
 
 def toggle_options():
-  newoptions = not dpg.is_item_visible("editor options")
-  dpg.configure_item("editor options", show=newoptions)
-  dpg.configure_item("toggle options", label="Hide Options" if newoptions else "More Options")
+  newoptions = not dpg.is_item_visible(EDITOR_OPTIONS_TAG)
+  dpg.configure_item(EDITOR_OPTIONS_TAG, show=newoptions)
+  dpg.configure_item(TOGGLE_OPTIONS_TAG, label="Hide Options" if newoptions else "More Options")
 
 def main(filename):
   global orig_width, orig_height, file_box
@@ -938,20 +966,20 @@ def main(filename):
         with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + O")
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
         with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: F5")
-        dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag="toggle advanced", show=True)
-        dpg.add_button(label="More Options", callback=toggle_options, tag=f"toggle options")
-        with dpg.group(horizontal=False, tag="editor options", show=False):
+        dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag=TOGGLE_ADVANCED_TAG, show=True)
+        dpg.add_button(label="More Options", callback=toggle_options, tag=TOGGLE_OPTIONS_TAG)
+        with dpg.group(horizontal=False, tag=EDITOR_OPTIONS_TAG, show=False):
           # dpg.add_separator()
-          dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
+          dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config(AUTOSAVE, a), tag=config_tag(AUTOSAVE))
           # no easy way to get this to work with listpicker, so hidden by default
-          dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config("no_warn_switch", a), tag="config no_warn_switch", show=False)
-          dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config("no_warn_overwrite", a), tag="config no_warn_overwrite")
-          dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag="config show_hands")
-          dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
-          dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
-          dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
-          dpg.add_checkbox(label="High DPI Display (WIP)", callback=toggle_high_dpi, tag="config high_dpi")
-        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box") # can't set size???
+          dpg.add_checkbox(label="Don't warn about unsaved changes", callback=lambda s, a: set_config(NO_WARN_SWITCH, a), tag=config_tag(NO_WARN_SWITCH), show=False)
+          dpg.add_checkbox(label="Don't warn about overwriting files", callback=lambda s, a: set_config(NO_WARN_OVERWRITE, a), tag=config_tag(NO_WARN_OVERWRITE))
+          dpg.add_checkbox(label="Show hand sprite overlay", callback=toggle_hands, tag=config_tag(SHOW_HANDS))
+          dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag=config_tag(MAKE_BACKUPS))
+          dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag=config_tag(USE_JTK2D))
+          dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config(AUTOSCROLL, a), tag=config_tag(AUTOSCROLL))
+          dpg.add_checkbox(label="High DPI Display (WIP)", callback=toggle_high_dpi, tag=config_tag(HIGH_DPI))
+        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", callback=filter_files, tag=FILE_SEARCH_BOX_TAG) # can't set size???
         # file_box = BetterListBox(items=[], width=300, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
         file_box = BetterListBox(items=[], parent=filewidgetgroup, callback=set_current_file_from_picker_box)
 
@@ -966,36 +994,36 @@ def main(filename):
             # dpg.add_text(f"")
             with dpg.group(horizontal=True, tag=f"animation controls"):
               dpg.add_text(f" Animation: ")
-              dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
+              dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=ANIMATION_ENABLED_TAG)
               with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + A")
-              colorize_button(f"animation enabled", DISABLED_COLOR)
-              dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --", show=False)
-              dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -", show=False)
-              dpg.add_text(f"{animation_speed} FPS", tag="animation fps", show=False)
-              dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +", show=False)
-              dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++", show=False)
+              colorize_button(ANIMATION_ENABLED_TAG, DISABLED_COLOR)
+              dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=FPS_DOWN2_TAG, show=False)
+              dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=FPS_DOWN1_TAG, show=False)
+              dpg.add_text(f"{animation_speed} FPS", tag=ANIMATION_FPS_TAG, show=False)
+              dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=FPS_UP1_TAG, show=False)
+              dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=FPS_UP2_TAG, show=False)
 
           # Set up our config / import / export / copy buttons
-          with dpg.group(horizontal=False, tag="advanced controls", show=False):
-            dpg.add_text(f"Working Dir: ", tag="image path")
-            dpg.add_text(f"Image Name:  ", tag="image name")
-            dpg.add_text(f"Image Size:  0 x 0 pixels", tag="image size")
+          with dpg.group(horizontal=False, tag=ADVANCED_CONTROLS_TAG, show=False):
+            dpg.add_text(f"Working Dir: ", tag=IMAGE_PATH_TAG)
+            dpg.add_text(f"Image Name:  ", tag=IMAGE_NAME_TAG)
+            dpg.add_text(f"Image Size:  0 x 0 pixels", tag=IMAGE_SIZE_TAG)
             # Save button
             with dpg.group(horizontal=True):
               dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
               # with modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button", show=False)
-              colorize_button("export button", (0,128,128,255))
+              dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_TAG, show=False)
+              colorize_button(EXPORT_BUTTON_TAG, (0,128,128,255))
               # without modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag="export button noprompt", show=False)
-              colorize_button("export button noprompt", (0,128,128,255))
-              dpg.add_button(label="No Changes To Save", callback=export_callback, tag="no export button", show=False)
+              dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_NP_TAG, show=False)
+              colorize_button(EXPORT_BUTTON_NP_TAG, (0,128,128,255))
+              dpg.add_button(label="No Changes To Save", callback=export_callback, tag=NO_EXPORT_BUTTON_TAG, show=False)
             # Revert button
             with dpg.group(horizontal=True):
               dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Revert Changes", callback=revert_callback, tag="revert button", show=False)
-              colorize_button("revert button", (128,64,64,255))
-              dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag="no revert button", show=False)
+              dpg.add_button(label="Revert Changes", callback=revert_callback, tag=REVERT_BUTTON_TAG, show=False)
+              colorize_button(REVERT_BUTTON_TAG, (128,64,64,255))
+              dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag=NO_REVERT_BUTTON_TAG, show=False)
             # Copy Button
             with dpg.group(horizontal=True):
               dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
@@ -1004,22 +1032,21 @@ def main(filename):
             with dpg.group(horizontal=True, tag="paste box"):
               dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
               dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
-              dpg.add_text("", tag="paste filename")
+              dpg.add_text("", tag=PASTE_FILENAME_TAG)
             # Translate Button
             with dpg.group(horizontal=True, tag="translate box"):
               dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
               dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
-              # dpg.add_text("", tag="paste filename")
 
         # Set up the main drawing list
-        with dpg.drawlist(width=1, height=1, tag="drawlist"):
+        with dpg.drawlist(width=1, height=1, tag=DRAWLIST_TAG):
           pass # deferred until load_gun_image()
 
         # Set up a click handler for our drawing list
-        with dpg.item_handler_registry(tag="drawlist click handler"):
+        with dpg.item_handler_registry(tag=DRAWLIST_CLICK_HANDLER_TAG):
             dpg.add_item_clicked_handler(button=dpg.mvMouseButton_Left, callback=on_plot_clicked)
             dpg.add_item_clicked_handler(button=dpg.mvMouseButton_Right, callback=on_plot_right_clicked)
-        dpg.bind_item_handler_registry("drawlist", "drawlist click handler")
+        dpg.bind_item_handler_registry(DRAWLIST_TAG, DRAWLIST_CLICK_HANDLER_TAG)
 
   # Set up a global mouse handler
   with dpg.handler_registry(tag="global mouse handler"):
@@ -1035,7 +1062,7 @@ def main(filename):
     # Ctrl + O = open gun data
     dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: control_pressed() and open_import_dialog())
     # Ctrl + F = focus file filter box
-    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: control_pressed() and dpg.focus_item("file search box"))
+    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: control_pressed() and dpg.focus_item(FILE_SEARCH_BOX_TAG))
     # Ctrl + S = save active gun changes
     dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: control_pressed() and save_changes_from_shortcut())
     # Ctrl + Z = revert active gun changes
@@ -1056,7 +1083,7 @@ def main(filename):
   resize_gui()
   last_file = None
   if filename is None:
-    filename = get_config("last_file") or None
+    filename = get_config(LAST_FILE) or None
     if (filename is None) or (not os.path.exists(filename)):
       filename = None
   if filename is not None:
@@ -1097,7 +1124,7 @@ def main(filename):
       dpg.render_dearpygui_frame()
 
   # Before we exit, export our current image if we have unsaved changes and autosave is on
-  if dpg.does_item_exist("save modal") and get_config("autosave"):
+  if dpg.does_item_exist(SAVE_MODAL_TAG) and get_config(AUTOSAVE):
     export_callback()
 
   # Finish up
