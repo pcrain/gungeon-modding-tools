@@ -247,7 +247,11 @@ class BetterListBox:
     frames    = None # indices of the frames corresponding to our current animation
     cur_frame = 0    # the current frame of our animation playing
     def advance_frame(self):
-      cur_root = self.get_animation_root(dpg.get_item_label(self.items[self.cur_index]))
+      if self.cur_index < len(self.items):
+        cur_root = self.get_animation_root(dpg.get_item_label(self.items[self.cur_index]))
+      else:
+        cur_root = None
+
       # Figure out the name of our current animation if necessary
       if self.root != cur_root:
         self.root = cur_root
@@ -257,7 +261,12 @@ class BetterListBox:
           if self.get_animation_root(dpg.get_item_label(item)) == cur_root:
             self.frames.append(i)
 
-      self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+      if self.root is None:
+        return
+      nframes = len(self.frames)
+      if nframes < 1:
+        return
+      self.cur_frame = (self.cur_frame + 1) % nframes
       self.scroll_and_invoke_callback(self.items[self.frames[self.cur_frame]])
 
 def preview_scale():
