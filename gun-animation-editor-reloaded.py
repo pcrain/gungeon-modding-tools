@@ -676,10 +676,13 @@ def load_json_from_file(filename):
 def set_current_file_from_import_dialog(sender, app_data):
   dpg.configure_item("import dialog", show=False)
 
+  stem = None
   for _, filename in app_data.get("selections",{}).items():
     stem = filename.replace(pref_ext(), "").replace(alt_ext(), "").replace(".png","")
     break
 
+  if stem is None:
+    return
   if not os.path.exists(f"{stem}.png"):
     return
 
@@ -705,7 +708,7 @@ def open_import_dialog():
     if dpg.does_item_exist("import keyboard handler"):
       dpg.delete_item("import keyboard handler")
     dpg.delete_item("import dialog")
-  with dpg.file_dialog(label="Edit Gun Data", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
+  with dpg.file_dialog(label="Open Gun PNG or JSON", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
     dpg.add_file_extension("Gungeon Data files {.png,.json,.jtk2d}", color=(0, 255, 255, 255))
     dpg.add_file_extension(".png", color=(255, 255, 0, 255))
     dpg.add_file_extension(pref_ext(), color=(255, 0, 255, 255))
@@ -930,7 +933,9 @@ def main(filename):
       # Set up our file picker box
       with dpg.group(horizontal=False, width=300, tag="filewidget") as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
         dpg.add_button(label="Open Gun For Editing", callback=open_import_dialog, tag="import button", show=True)
+        with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + O")
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
+        with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: F5")
         dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag="toggle advanced", show=True)
         dpg.add_button(label="More Options", callback=toggle_options, tag=f"toggle options")
         with dpg.group(horizontal=False, tag="editor options", show=False):
@@ -960,13 +965,13 @@ def main(filename):
             with dpg.group(horizontal=True, tag=f"animation controls"):
               dpg.add_text(f" Animation: ")
               dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=f"animation enabled")
+              with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + A")
               colorize_button(f"animation enabled", DISABLED_COLOR)
               dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=f"fps --", show=False)
               dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=f"fps -", show=False)
               dpg.add_text(f"{animation_speed} FPS", tag="animation fps", show=False)
               dpg.add_button(label="+1", callback=lambda: change_animation_speed(1), tag=f"fps +", show=False)
               dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=f"fps ++", show=False)
-              dpg.add_text(f"Ctrl+A", color=SHORTCUT_COLOR, tag=f"animation shortcut box")
 
           # Set up our config / import / export / copy buttons
           with dpg.group(horizontal=False, tag="advanced controls", show=False):
@@ -1041,6 +1046,8 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: control_pressed() and next_file(1))
     # Ctrl + Up = previous file in picker
     dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: control_pressed() and next_file(-1))
+    # F5 = refresh file list
+    dpg.add_key_press_handler(key=dpg.mvKey_F5, callback=lambda: refresh_file_list())
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
@@ -1075,14 +1082,14 @@ def main(filename):
         file_box.scroll_to_specific_item(last_file)
 
   # below replaces, start_dearpygui()
-  time = 0
+  frametime = 0
   while dpg.is_dearpygui_running():
       # Animate if necessary
       if animation_on:
-        time += dpg.get_delta_time()
+        frametime += dpg.get_delta_time()
         frame_speed = 1.0 / animation_speed
-        if (time > frame_speed):
-          time %= frame_speed
+        if (frametime > frame_speed):
+          frametime %= frame_speed
           file_box.advance_frame()
 
       dpg.render_dearpygui_frame()
