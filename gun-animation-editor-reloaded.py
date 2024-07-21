@@ -33,6 +33,7 @@ PREVIEW_SCALE     = 8 # magnification factor for preview
 PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
 
 # Tags
+MAIN_WINDOW_TAG            = "mainwindow"
 FILE_PICKER_TAG            = "file picker box"
 PREVIEW_IMAGE_TAG          = "preview_image"
 HAND_IMAGE_TAG             = "hand_image"
@@ -971,6 +972,9 @@ def hide_translate_modal():
 def control_pressed():
   return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
+def no_modal_open():
+  return dpg.get_item_state(MAIN_WINDOW_TAG)["focused"]
+
 def toggle_advanced_view():
   global _advanced_view_active
   _advanced_view_active = not dpg.is_item_visible(ADVANCED_CONTROLS_TAG)
@@ -1018,7 +1022,7 @@ def main(filename):
   #   dpg.bind_font(default_font)
 
   # Set up the main window
-  with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
+  with dpg.window(label="Files List", tag=MAIN_WINDOW_TAG, width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
       with dpg.group(horizontal=False, width=300, tag=FILE_WIDGET_TAG) as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
@@ -1117,32 +1121,32 @@ def main(filename):
   # Set up some global keyboard shortcuts
   with dpg.handler_registry(tag="global keyboard handler"):
     # Ctrl + C = copy gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_C, callback=lambda: control_pressed() and copy_state())
+    dpg.add_key_press_handler(key=dpg.mvKey_C, callback=lambda: no_modal_open() and control_pressed() and copy_state())
     # Ctrl + V = paste gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_V, callback=lambda: control_pressed() and paste_state())
+    dpg.add_key_press_handler(key=dpg.mvKey_V, callback=lambda: no_modal_open() and control_pressed() and paste_state())
     # Ctrl + O = open gun data
-    dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: control_pressed() and open_import_dialog())
+    dpg.add_key_press_handler(key=dpg.mvKey_O, callback=lambda: no_modal_open() and control_pressed() and open_import_dialog())
     # Ctrl + F = focus file filter box
-    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: control_pressed() and dpg.focus_item(FILE_SEARCH_BOX_TAG))
+    dpg.add_key_press_handler(key=dpg.mvKey_F, callback=lambda: no_modal_open() and control_pressed() and dpg.focus_item(FILE_SEARCH_BOX_TAG))
     # Ctrl + S = save active gun changes
-    dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: control_pressed() and save_changes_from_shortcut())
+    dpg.add_key_press_handler(key=dpg.mvKey_S, callback=lambda: no_modal_open() and control_pressed() and save_changes_from_shortcut())
     # Ctrl + Z = revert active gun changes
-    dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: control_pressed() and revert_callback())
+    dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: no_modal_open() and control_pressed() and revert_callback())
     # Ctrl + T = show attach point translate modal
-    dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: control_pressed() and show_translate_modal())
+    dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: no_modal_open() and control_pressed() and show_translate_modal())
     # Ctrl + A = toggle animation
-    dpg.add_key_press_handler(key=dpg.mvKey_A, callback=lambda: control_pressed() and toggle_animation())
+    dpg.add_key_press_handler(key=dpg.mvKey_A, callback=lambda: no_modal_open() and control_pressed() and toggle_animation())
     # Ctrl + Down = next file in picker
-    dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: control_pressed() and next_file(1))
+    dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: no_modal_open() and control_pressed() and next_file(1))
     # Ctrl + Up = previous file in picker
-    dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: control_pressed() and next_file(-1))
+    dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: no_modal_open() and control_pressed() and next_file(-1))
     # F5 = refresh file list
-    dpg.add_key_press_handler(key=dpg.mvKey_F5, callback=lambda: refresh_file_list())
+    dpg.add_key_press_handler(key=dpg.mvKey_F5, callback=lambda: no_modal_open() and refresh_file_list())
     # 1-4 = toggle attach points
-    dpg.add_key_press_handler(key=dpg.mvKey_1, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[0]))
-    dpg.add_key_press_handler(key=dpg.mvKey_2, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[1]))
-    dpg.add_key_press_handler(key=dpg.mvKey_3, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[2]))
-    dpg.add_key_press_handler(key=dpg.mvKey_4, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[3]))
+    dpg.add_key_press_handler(key=dpg.mvKey_1, callback=lambda: no_modal_open() and control_pressed() and toggle_attach_point(_attach_points[0]))
+    dpg.add_key_press_handler(key=dpg.mvKey_2, callback=lambda: no_modal_open() and control_pressed() and toggle_attach_point(_attach_points[1]))
+    dpg.add_key_press_handler(key=dpg.mvKey_3, callback=lambda: no_modal_open() and control_pressed() and toggle_attach_point(_attach_points[2]))
+    dpg.add_key_press_handler(key=dpg.mvKey_4, callback=lambda: no_modal_open() and control_pressed() and toggle_attach_point(_attach_points[3]))
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
