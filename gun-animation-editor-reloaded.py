@@ -60,10 +60,23 @@ FPS_UP1_TAG                = "fps +"
 FPS_UP2_TAG                = "fps ++"
 FPS_DOWN1_TAG              = "fps -"
 FPS_DOWN2_TAG              = "fps --"
+TRANSLATE_X_BOX_TAG        = "translate x box"
+TRANSLATE_Y_BOX_TAG        = "translate y box"
+TRANSLATE_BACKUPS_TAG      = "translate backups"
+TRANSLATE_MODAL_TAG        = "translate modal"
+TRANSLATE_HANDLER_TAG      = "translate keyboard handler"
+GUN_LAYER_TAG = "gun layer"
+IMPORT_DIALOG_TAG = "import dialog"
+IMPORT_HANDLER_TAG = "import keyboard handler"
+FILE_WIDGET_TAG = "filewidget"
 
 # Misc
 ENABLED_STRING    = " Enabled" #note the space
 DISABLED_STRING   = "Disabled"
+BACKUP_PREFIX     = "json_backup"
+EXT_JSON          = ".json"
+EXT_JTK2D         = ".jtk2d"
+EXT_PNG           = ".png"
 HAND_IMAGE_PATH   = resource_path("hand_main.png")
 OFF_IMAGE_PATH    = resource_path("hand_off.png")
 ENABLED_COLOR     = (64, 128, 64, 255)
@@ -75,13 +88,25 @@ DRAWLIST_PAD      = 64
 WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
 
-CachedImage = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
-AttachPoint = namedtuple('AttachPoint', ['name', 'tag_base', 'internal_name', 'color', 'shortcut', 'enabled_default'])
-_attach_points = [
-  AttachPoint(" Main Hand", "main hand", "PrimaryHand",   (255, 255,   0, 255), "Left Click",          ENABLED_STRING ),
-  AttachPoint("  Off Hand", "off hand",  "SecondaryHand", (255,   0, 255, 255), "Right Click",         DISABLED_STRING),
-  AttachPoint("      Clip", "clip",      "Clip",          (128, 255, 255, 255), "Shift + Left Click",  DISABLED_STRING),
-  AttachPoint("    Casing", "casing",    "Casing",        (  0, 255,   0, 255), "Shift + Right Click", ENABLED_STRING),
+CachedImage     = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
+AttachPoint     = namedtuple('AttachPoint', ['tag_base', 'name', 'internal_name', 'color', 'shortcut', 'enabled_default'])
+TAG_MAIN_HAND   = "main hand"
+TAG_OFF_HAND    = "off hand"
+TAG_CLIP        = "clip"
+TAG_CASING      = "casing"
+LABEL_MAIN_HAND = " Main Hand"
+LABEL_OFF_HAND  = "  Off Hand"
+LABEL_CLIP      = "      Clip"
+LABEL_CASING    = "    Casing"
+AP_MAIN_HAND    = "PrimaryHand"
+AP_OFF_HAND     = "SecondaryHand"
+AP_CLIP         = "Clip"
+AP_CASING       = "Casing"
+_attach_points  = [
+  AttachPoint(TAG_MAIN_HAND, LABEL_MAIN_HAND, AP_MAIN_HAND, (255, 255,   0, 255), "Left Click",          ENABLED_STRING ),
+  AttachPoint(TAG_OFF_HAND,  LABEL_OFF_HAND,  AP_OFF_HAND,  (255,   0, 255, 255), "Right Click",         DISABLED_STRING),
+  AttachPoint(TAG_CLIP,      LABEL_CLIP,      AP_CLIP,      (128, 255, 255, 255), "Shift + Left Click",  DISABLED_STRING),
+  AttachPoint(TAG_CASING,    LABEL_CASING,    AP_CASING,    (  0, 255,   0, 255), "Shift + Right Click", ENABLED_STRING),
 ]
 _attach_point_dict   = { p.name : p for p in _attach_points}
 _attach_point_coords = { p.name : (0,0) for p in _attach_points}
@@ -299,19 +324,19 @@ def clear_unsaved_changes():
 
 def pref_ext(): # preferred file extension
   if get_config(USE_JTK2D):
-    return ".jtk2d"
-  return ".json"
+    return EXT_JTK2D
+  return EXT_JSON
 
 def alt_ext(): # alternate file extension
   if get_config(USE_JTK2D):
-    return ".json"
-  return ".jtk2d"
+    return EXT_JSON
+  return EXT_JTK2D
 
 def enable_save_modal():
   if dpg.does_item_exist(SAVE_MODAL_TAG):
     return # no need to enable a modal that's already enabled
 
-  export_path = os.path.join(current_dir,current_file).replace(".png", pref_ext())
+  export_path = os.path.join(current_dir,current_file).replace(EXT_PNG, pref_ext())
   if not os.path.exists(export_path):
     return # no need for a modal if we're saving to a new file
 
@@ -332,7 +357,6 @@ def colorize_button(button, color = None):
     return
 
   theme_tag = f"{color} colored button theme"
-
   if not dpg.does_item_exist(theme_tag):
     with dpg.theme(tag=theme_tag):
       with dpg.theme_component(dpg.mvButton):
@@ -387,7 +411,7 @@ def get_default_gun_json(width, height):
         "size" : 2,
       },
       {
-        "name"     : "PrimaryHand",
+        "name"     : AP_MAIN_HAND,
         "position" : {
           "x" : 0.4375,
           "y" : 0.4375,
@@ -396,7 +420,7 @@ def get_default_gun_json(width, height):
         "angle": 0.0
       },
       {
-        "name"    : "Casing",
+        "name"    : AP_CASING,
         "position": {
           "x" : 0.5625,
           "y" : 0.375,
@@ -418,11 +442,19 @@ def add_positional_element(basejson, name, x, y):
     }]
   basejson["attachPoints"][0]["size"] += 1
 
+def apc_enabled(p)  : return f"{p.tag_base} enabled"
+def apc_shortcut(p) : return f"{p.tag_base} shortcut box"
+def apc_controls(p) : return f"{p.tag_base} controls"
+def apc_x(p)        : return f"{p.tag_base} x box"
+def apc_y(p)        : return f"{p.tag_base} y box"
+def apc_layer(p)    : return f"{p.tag_base} layer"
+def apc_circle(p)   : return f"{p.tag_base} circle"
+
 def get_json_for_current_gun():
   basejson = get_basic_gun_json(orig_width, orig_height)
   for p in _attach_points:
-    if dpg.get_item_label(f"{p.tag_base} enabled") == ENABLED_STRING:
-      add_positional_element(basejson, p.internal_name, dpg.get_value(f"{p.tag_base} x box"), dpg.get_value(f"{p.tag_base} y box"))
+    if dpg.get_item_label(apc_enabled(p)) == ENABLED_STRING:
+      add_positional_element(basejson, p.internal_name, dpg.get_value(apc_x(p)), dpg.get_value(apc_y(p)))
   return basejson
 
 def export_callback():
@@ -430,7 +462,7 @@ def export_callback():
   if not unsaved_changes:
     return # no changes since last export
 
-  export_path = os.path.join(current_dir,current_file).replace(".png", pref_ext())
+  export_path = os.path.join(current_dir,current_file).replace(EXT_PNG, pref_ext())
   with open(export_path,'w') as fout:
     fout.write(json.dumps(get_json_for_current_gun(),indent=2))
   # subprocess.Popen(shlex.split(f"subl {export_path}"))
@@ -445,9 +477,9 @@ def revert_callback():
   clear_unsaved_changes()
   fullpath = os.path.join(current_dir, current_file)
   load_gun_image(fullpath)
-  jsonpath = fullpath.replace(".png", pref_ext())
+  jsonpath = fullpath.replace(EXT_PNG, pref_ext())
   if not os.path.exists(jsonpath):
-    jsonpath = fullpath.replace(".png", alt_ext())
+    jsonpath = fullpath.replace(EXT_PNG, alt_ext())
   if os.path.exists(jsonpath):
     load_json_from_file(jsonpath)
 
@@ -477,7 +509,7 @@ def redraw_attach_point(p):
     return
 
   # Delete and redraw the hand drawing layer
-  layer = f"{p.tag_base} layer"
+  layer = apc_layer(p)
   if dpg.does_alias_exist(layer):
     dpg.delete_item(layer)
   dpg.push_container_stack(DRAWLIST_TAG)
@@ -492,13 +524,13 @@ def redraw_attach_point(p):
     offset = (center[0] - 2*preview_scale(), center[1] - 2*preview_scale())
     # dpg.draw_image(HAND_IMAGE_TAG, center=_attach_point_coords[p.name], tag=f"{p.tag_base} hand")
     # dpg.draw_image(HAND_IMAGE_TAG, offset, offset + (4*preview_scale(), 4*preview_scale()), tag=f"{p.tag_base} circle")
-    dpg.draw_image(HAND_IMAGE_PATH if "main" in p.tag_base else OFF_IMAGE_PATH, offset, (offset[0] + 4*preview_scale(), offset[1] + 4*preview_scale()), tag=f"{p.tag_base} circle")
+    dpg.draw_image(HAND_IMAGE_PATH if "main" in p.tag_base else OFF_IMAGE_PATH, offset, (offset[0] + 4*preview_scale(), offset[1] + 4*preview_scale()), tag=apc_circle(p))
   else:
-    dpg.draw_circle(center=center, radius=preview_scale(), color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
+    dpg.draw_circle(center=center, radius=preview_scale(), color=BLACK, fill=p.color, tag=apc_circle(p))
   dpg.pop_container_stack()
 
 def attach_point_enabled(p):
-  return dpg.get_item_label(f"{p.tag_base} enabled") != DISABLED_STRING
+  return dpg.get_item_label(apc_enabled(p)) != DISABLED_STRING
 
 def move_hand_preview(x, y, p=None):
   global _attach_point_coords
@@ -521,8 +553,8 @@ def move_hand_preview(x, y, p=None):
   # Get the real coordinates of the hand wrt what the JSON expects
   realx, realy = toJsonCoordinates(*_attach_point_coords[p.name])
   # ...and update the boxes
-  dpg.set_value(f"{p.tag_base} x box", realx)
-  dpg.set_value(f"{p.tag_base} y box", realy)
+  dpg.set_value(apc_x(p), realx)
+  dpg.set_value(apc_y(p), realy)
 
   # Redraw the attach point
   redraw_attach_point(p)
@@ -530,9 +562,9 @@ def move_hand_preview(x, y, p=None):
 def on_plot_clicked(sender, app_data):
   toggle_animation(False)
   if dpg.is_key_down(dpg.mvKey_Shift):
-    p=_attach_point_dict["      Clip"]
+    p=_attach_point_dict[LABEL_CLIP]
   else:
-    p=_attach_point_dict[" Main Hand"]
+    p=_attach_point_dict[LABEL_MAIN_HAND]
   move_hand_preview(*dpg.get_drawing_mouse_pos(), p=p)
   # Mark our unsaved changes state
   mark_unsaved_changes()
@@ -540,12 +572,12 @@ def on_plot_clicked(sender, app_data):
 def on_plot_right_clicked(sender, app_data):
   toggle_animation(False)
   if dpg.is_key_down(dpg.mvKey_Shift):
-    p=_attach_point_dict["    Casing"]
+    p=_attach_point_dict[LABEL_CASING]
   else:
-    p=_attach_point_dict["  Off Hand"]
+    p=_attach_point_dict[LABEL_OFF_HAND]
   move_hand_preview(*dpg.get_drawing_mouse_pos(), p=p)
   # Mark our unsaved changes state
-  if dpg.get_item_label(f"{p.tag_base} enabled") != DISABLED_STRING:
+  if dpg.get_item_label(apc_enabled(p)) != DISABLED_STRING:
     mark_unsaved_changes()
 
 def on_mouse_dragged(sender, app_data):
@@ -562,16 +594,16 @@ def change_active_attach_point(sender, app_data):
   global _active_attach_point
   _active_attach_point = _attach_point_dict[app_data]
 
-def toggle_element(element, override=None, refresh=False):
-  cur_enabled = dpg.get_item_label(f"{element} enabled") == ENABLED_STRING
+def toggle_attach_point(p, override=None, refresh=False):
+  cur_enabled = dpg.get_item_label(apc_enabled(p)) == ENABLED_STRING
   new_enabled = cur_enabled if refresh else (not cur_enabled) if override is None else override
-  dpg.configure_item(f"{element} x box", show=new_enabled and _advanced_view_active)
-  dpg.configure_item(f"{element} y box", show=new_enabled and _advanced_view_active)
-  dpg.configure_item(f"{element} shortcut box", show=new_enabled) #
-  dpg.set_item_label(f"{element} enabled", ENABLED_STRING if new_enabled else DISABLED_STRING)
-  colorize_button(f"{element} enabled", ENABLED_COLOR if new_enabled else DISABLED_COLOR)
+  dpg.configure_item(apc_x(p), show=new_enabled and _advanced_view_active)
+  dpg.configure_item(apc_y(p), show=new_enabled and _advanced_view_active)
+  dpg.configure_item(apc_shortcut(p), show=new_enabled) #
+  dpg.set_item_label(apc_enabled(p), ENABLED_STRING if new_enabled else DISABLED_STRING)
+  colorize_button(apc_enabled(p), ENABLED_COLOR if new_enabled else DISABLED_COLOR)
 
-  layer = f"{element} layer"
+  layer = apc_layer(p)
   if dpg.does_alias_exist(layer):
     dpg.configure_item(layer, show=new_enabled)
   mark_unsaved_changes()
@@ -593,40 +625,40 @@ def generate_controls(p):
   name = p.name
   tag_base = p.tag_base
   label = p.enabled_default
-  with dpg.group(horizontal=True, tag=f"{tag_base} controls"):
+  with dpg.group(horizontal=True, tag=apc_controls(p)):
     dpg.add_text(f"{name}: ",color=p.color)
-    dpg.add_button(label=label, callback=lambda: toggle_element(f"{tag_base}"), tag=f"{tag_base} enabled")
-    colorize_button(f"{tag_base} enabled", ENABLED_COLOR if label==ENABLED_STRING else DISABLED_COLOR)
-    dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} x box", default_value="0.0000")
-    dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=f"{tag_base} y box", default_value="0.0000")
-    dpg.add_text(f"{p.shortcut}", color=p.color, tag=f"{tag_base} shortcut box")
+    dpg.add_button(label=label, callback=lambda: toggle_attach_point(p), tag=apc_enabled(p))
+    colorize_button(apc_enabled(p), ENABLED_COLOR if label==ENABLED_STRING else DISABLED_COLOR)
+    dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=apc_x(p), default_value="0.0000")
+    dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=apc_y(p), default_value="0.0000")
+    dpg.add_text(f"{p.shortcut}", color=p.color, tag=apc_shortcut(p))
 
 image_cache = {}
 def load_scaled_image(filename):
   if (filename in image_cache):
     # print(f"using cached {filename}")
-    (dpg_image, orig_width, orig_height) = image_cache[filename]
-    scaled_width, scaled_height = preview_scale() * orig_width, preview_scale() * orig_height
-  else:
-    pil_image = Image.open(filename)
-    if pil_image.mode != "RGBA":
-      pil_image = pil_image.convert(mode='RGBA')
-    orig_width, orig_height = pil_image.size
-    scaled_width, scaled_height = preview_scale() * orig_width, preview_scale() * orig_height
-    scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
-    dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
-    image_cache[filename] = (dpg_image, orig_width, orig_height)
-    with dpg.texture_registry():
-      if dpg.does_alias_exist(filename):
-        print("should be impossible")
-        dpg.remove_alias(filename)
-        dpg.delete_item(filename)
-      dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=filename)
+    return image_cache[filename]
+
+  scale = preview_scale()
+  pil_image = Image.open(filename)
+  if pil_image.mode != "RGBA":
+    pil_image = pil_image.convert(mode='RGBA')
+  orig_width, orig_height = pil_image.size
+  scaled_width, scaled_height = scale * orig_width, scale * orig_height
+  scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
+  dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
+  image_cache[filename] = (dpg_image, orig_width, orig_height)
+  with dpg.texture_registry():
+    if dpg.does_alias_exist(filename):
+      print("should be impossible")
+      dpg.remove_alias(filename)
+      dpg.delete_item(filename)
+    dpg.add_static_texture(width=scaled_width, height=scaled_height, default_value=dpg_image, tag=filename)
   return image_cache[filename]
 
 def refresh_file_list():
   global dir_file_list, filtered_file_list
-  dir_file_list = sorted([f[:-4] for f in filter(lambda x: x.endswith(".png"), os.listdir(current_dir))])
+  dir_file_list = sorted([f[:-4] for f in filter(lambda x: x.endswith(EXT_PNG), os.listdir(current_dir))])
   filtered_file_list = dir_file_list
   update_file_list(filtered_file_list)
 
@@ -652,11 +684,10 @@ def load_gun_image(filename):
   dpg.set_value(IMAGE_NAME_TAG, f"Image Name:  {current_file}")
   dpg.set_value(IMAGE_SIZE_TAG, f"Image Size:  {orig_width} x {orig_height} pixels")
   dpg.configure_item(DRAWLIST_TAG, width=DRAWLIST_PAD*2+scaled_width, height=DRAWLIST_PAD*2+scaled_height)
-  layer_tag = f"gun layer"
-  if dpg.does_alias_exist(layer_tag):
-    dpg.delete_item(layer_tag)
+  if dpg.does_alias_exist(GUN_LAYER_TAG):
+    dpg.delete_item(GUN_LAYER_TAG)
   dpg.push_container_stack(DRAWLIST_TAG)
-  with dpg.draw_layer(tag=layer_tag):
+  with dpg.draw_layer(tag=GUN_LAYER_TAG):
     #Draw outer border
     dpg.draw_rectangle((0,0), (DRAWLIST_PAD*2+scaled_width,DRAWLIST_PAD*2+scaled_height))
     #Draw inner border
@@ -680,7 +711,7 @@ def update_file_list(filelist):
 def load_json_from_dict(jdata):
   # Temporarily disable all previews
   for p in _attach_points:
-    toggle_element(p.tag_base, override=False)
+    toggle_attach_point(p, override=False)
 
   # Reenable previews for each defined attach point
   for a in jdata.get("attachPoints", []):
@@ -690,7 +721,7 @@ def load_json_from_dict(jdata):
     for p in _attach_points:
       if a["name"] != p.internal_name:
         continue
-      toggle_element(p.tag_base, override=True)
+      toggle_attach_point(p, override=True)
       px = a.get("position",{}).get("x", 0)
       py = a.get("position",{}).get("y", 0)
       cx, cy = fromJsonCoordinates(px,py)
@@ -704,19 +735,19 @@ def load_json_from_file(filename):
   load_json_from_dict(jdata)
 
 def set_current_file_from_import_dialog(sender, app_data):
-  dpg.configure_item("import dialog", show=False)
+  dpg.configure_item(IMPORT_DIALOG_TAG, show=False)
 
   stem = None
   for _, filename in app_data.get("selections",{}).items():
-    stem = filename.replace(pref_ext(), "").replace(alt_ext(), "").replace(".png","")
+    stem = filename.replace(pref_ext(), "").replace(alt_ext(), "").replace(EXT_PNG,"")
     break
 
   if stem is None:
     return
-  if not os.path.exists(f"{stem}.png"):
+  if not os.path.exists(f"{stem}{EXT_PNG}"):
     return
 
-  load_gun_image(f"{stem}.png")
+  load_gun_image(f"{stem}{EXT_PNG}")
   if os.path.exists(f"{stem}{pref_ext()}"):
     load_json_from_file(f"{stem}{pref_ext()}")
   elif os.path.exists(f"{stem}{alt_ext()}"):
@@ -725,8 +756,8 @@ def set_current_file_from_import_dialog(sender, app_data):
 
 def set_current_file_from_picker_box(sender, file_stem):
   fullpath = os.path.join(current_dir, file_stem)
-  if os.path.exists(f"{fullpath}.png"):
-    load_gun_image(f"{fullpath}.png")
+  if os.path.exists(f"{fullpath}{EXT_PNG}"):
+    load_gun_image(f"{fullpath}{EXT_PNG}")
     if os.path.exists(f"{fullpath}{pref_ext()}"):
       load_json_from_file(f"{fullpath}{pref_ext()}")
     if os.path.exists(f"{fullpath}{alt_ext()}"):
@@ -734,18 +765,18 @@ def set_current_file_from_picker_box(sender, file_stem):
     clear_unsaved_changes()
 
 def open_import_dialog():
-  if dpg.does_item_exist("import dialog"):
-    if dpg.does_item_exist("import keyboard handler"):
-      dpg.delete_item("import keyboard handler")
-    dpg.delete_item("import dialog")
-  with dpg.file_dialog(label="Open Gun PNG or JSON", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag="import dialog"):
+  if dpg.does_item_exist(IMPORT_DIALOG_TAG):
+    if dpg.does_item_exist(IMPORT_HANDLER_TAG):
+      dpg.delete_item(IMPORT_HANDLER_TAG)
+    dpg.delete_item(IMPORT_DIALOG_TAG)
+  with dpg.file_dialog(label="Open Gun PNG or JSON", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag=IMPORT_DIALOG_TAG):
     dpg.add_file_extension("Gungeon Data files {.png,.json,.jtk2d}", color=(0, 255, 255, 255))
-    dpg.add_file_extension(".png", color=(255, 255, 0, 255))
+    dpg.add_file_extension(EXT_PNG, color=(255, 255, 0, 255))
     dpg.add_file_extension(pref_ext(), color=(255, 0, 255, 255))
     dpg.add_file_extension(alt_ext(), color=(255, 0, 255, 255))
-    with dpg.handler_registry(tag="import keyboard handler"):
-      dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item("import dialog", show=False))
-      dpg.add_key_release_handler(key=dpg.mvKey_Return, callback=lambda: set_current_file_from_import_dialog(None, dpg.get_file_dialog_info("import dialog")))
+    with dpg.handler_registry(tag=IMPORT_HANDLER_TAG):
+      dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item(IMPORT_DIALOG_TAG, show=False))
+      dpg.add_key_release_handler(key=dpg.mvKey_Return, callback=lambda: set_current_file_from_import_dialog(None, dpg.get_file_dialog_info(IMPORT_DIALOG_TAG)))
 
 def filter_files(_, query):
   global current_search, filtered_file_list, dir_file_list
@@ -772,12 +803,8 @@ def save_changes_from_shortcut():
 
 def toggle_hands(switch, value):
   set_config(SHOW_HANDS, value)
-  am = _attach_point_dict[" Main Hand"]
-  ao = _attach_point_dict["  Off Hand"]
-  redraw_attach_point(am)
-  redraw_attach_point(ao)
-  # for p in _attach_points:
-  #   toggle_element(p.tag_base, override=False)
+  redraw_attach_point(_attach_point_dict[LABEL_MAIN_HAND])
+  redraw_attach_point(_attach_point_dict[LABEL_OFF_HAND])
 
 def toggle_backups(switch, value):
   set_config(MAKE_BACKUPS, value)
@@ -793,7 +820,7 @@ def resize_gui(reload = False):
   global _gui_scale
   _gui_scale = 2 if get_config(HIGH_DPI) else 1
   dpg.set_global_font_scale(_gui_scale)
-  dpg.configure_item("filewidget", width=_gui_scale * 300)
+  dpg.configure_item(FILE_WIDGET_TAG, width=_gui_scale * 300)
   if reload:
     load_gun_image(os.path.join(current_dir, current_file))
 
@@ -811,9 +838,9 @@ def change_animation_speed(delta):
 
 def show_translate_modal():
   toggle_animation(False)
-  cur_json = os.path.join(current_dir,current_file.replace(".png", pref_ext()))
+  cur_json = os.path.join(current_dir,current_file.replace(EXT_PNG, pref_ext()))
   if not os.path.exists(cur_json):
-    cur_json = os.path.join(current_dir,current_file.replace(".png", alt_ext()))
+    cur_json = os.path.join(current_dir,current_file.replace(EXT_PNG, alt_ext()))
   if not os.path.exists(cur_json):
     return # bail out if we the current json doesn't exist
 
@@ -825,7 +852,7 @@ def show_translate_modal():
     if "attachPoints" not in jdata:
       return
     for i in range(1, len(jdata["attachPoints"])):
-      if jdata["attachPoints"][i]["name"] != "PrimaryHand":
+      if jdata["attachPoints"][i]["name"] != AP_MAIN_HAND:
         continue
       pos = jdata["attachPoints"][i]["position"]
       oldx = pos["x"]
@@ -833,10 +860,10 @@ def show_translate_modal():
       break
   if (oldx is None) or (oldy is None):
     return # failed to read necessary JSON data
-  newx, newy = toJsonCoordinates(*_attach_point_coords[" Main Hand"])
+  newx, newy = toJsonCoordinates(*_attach_point_coords[LABEL_MAIN_HAND])
 
-  if dpg.does_item_exist("translate modal"):
-    dpg.configure_item("translate modal", show=True)
+  if dpg.does_item_exist(TRANSLATE_MODAL_TAG):
+    dpg.configure_item(TRANSLATE_MODAL_TAG, show=True)
     return # if the dialog is already created, just show it
 
   # get the base animation name and load all available jsons with the same name
@@ -852,35 +879,35 @@ def show_translate_modal():
     jsons.append(jpath)
 
   # create a modal dialog for translating all attach points corresponding to a sprite by the specified amount
-  with dpg.popup(EXPORT_BUTTON_TAG, modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag="translate modal"):
+  with dpg.popup(EXPORT_BUTTON_TAG, modal=True, mousebutton=dpg.mvMouseButton_Left, no_move=True, tag=TRANSLATE_MODAL_TAG):
     dpg.add_text(f"Translating {len(jsons)} sprites matching:")
     dpg.add_text(f"{root_name}_###", color=(192,255,128))
     dpg.add_separator()
     # dpg.add_checkbox(label="Translate All Animations for This Gun", tag="translate all")
-    dpg.add_checkbox(label="Make Backups", tag="translate backups", default_value=get_config(MAKE_BACKUPS))
-    dpg.add_input_float(label=f"x: {int(16 * (newx - oldx))}px", width=150, tag=f"translate x box", format="%.04f", step=1.0/16.0, default_value=(newx - oldx),
-      callback=lambda: dpg.configure_item("translate x box", label=f"""x: {int(16 * dpg.get_value("translate x box"))}px"""))
-    dpg.add_input_float(label=f"y: {int(16 * (newy - oldy))}px", width=150, tag=f"translate y box", format="%.04f", step=1.0/16.0, default_value=(newy - oldy),
-    callback=lambda: dpg.configure_item("translate y box", label=f"""y: {int(16 * dpg.get_value("translate y box"))}px"""))
+    dpg.add_checkbox(label="Make Backups", tag=TRANSLATE_BACKUPS_TAG, default_value=get_config(MAKE_BACKUPS))
+    dpg.add_input_float(label=f"x: {int(16 * (newx - oldx))}px", width=150, tag=TRANSLATE_X_BOX_TAG, format="%.04f", step=1.0/16.0, default_value=(newx - oldx),
+      callback=lambda: dpg.configure_item(TRANSLATE_X_BOX_TAG, label=f"""x: {int(16 * dpg.get_value(TRANSLATE_X_BOX_TAG))}px"""))
+    dpg.add_input_float(label=f"y: {int(16 * (newy - oldy))}px", width=150, tag=TRANSLATE_Y_BOX_TAG, format="%.04f", step=1.0/16.0, default_value=(newy - oldy),
+      callback=lambda: dpg.configure_item(TRANSLATE_Y_BOX_TAG, label=f"""y: {int(16 * dpg.get_value(TRANSLATE_Y_BOX_TAG))}px"""))
     dpg.add_separator()
     dpg.add_text(f"TIP: you can prepopulate the fields above by moving the primary hand attach point in the editor")
     dpg.add_separator()
     with dpg.group(horizontal=True):
       dpg.add_button(label="Translate", width=75, callback=lambda: translate_jsons(jsons))
       dpg.add_button(label="Cancel", width=75, callback=lambda: hide_translate_modal())
-    with dpg.handler_registry(tag="translate keyboard handler"):
+    with dpg.handler_registry(tag=TRANSLATE_HANDLER_TAG):
       dpg.add_key_release_handler(key=dpg.mvKey_Escape, callback=lambda: hide_translate_modal())
-  dpg.configure_item("translate modal", show=True)
+  dpg.configure_item(TRANSLATE_MODAL_TAG, show=True)
 
 def translate_jsons(jsons):
   # get necessary paramters
-  xshift = dpg.get_value("translate x box")
-  yshift = dpg.get_value("translate y box")
-  backup = dpg.get_value("translate backups")
+  xshift = dpg.get_value(TRANSLATE_X_BOX_TAG)
+  yshift = dpg.get_value(TRANSLATE_Y_BOX_TAG)
+  backup = dpg.get_value(TRANSLATE_BACKUPS_TAG)
 
   # make backups as necessary
   if backup:
-    bpath = os.path.join(current_dir,f"json_backup_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+    bpath = os.path.join(current_dir,f"{BACKUP_PREFIX}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
     os.makedirs(bpath)
     for j in jsons:
       shutil.copy(j, os.path.join(bpath,os.path.basename(j)))
@@ -899,14 +926,14 @@ def translate_jsons(jsons):
 
   # Hide the modal and reload the current gun's JSON
   hide_translate_modal()
-  load_json_from_file(os.path.join(current_dir,current_file.replace(".png",pref_ext())))
+  load_json_from_file(os.path.join(current_dir,current_file.replace(EXT_PNG, pref_ext())))
 
 def hide_translate_modal():
-  if dpg.does_item_exist("translate keyboard handler"):
-    dpg.delete_item("translate keyboard handler")
-  if dpg.does_item_exist("translate modal"):
-    dpg.configure_item("translate modal", show=False)
-    dpg.delete_item("translate modal")
+  if dpg.does_item_exist(TRANSLATE_HANDLER_TAG):
+    dpg.delete_item(TRANSLATE_HANDLER_TAG)
+  if dpg.does_item_exist(TRANSLATE_MODAL_TAG):
+    dpg.configure_item(TRANSLATE_MODAL_TAG, show=False)
+    dpg.delete_item(TRANSLATE_MODAL_TAG)
 
 def control_pressed():
   return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
@@ -917,7 +944,7 @@ def toggle_advanced_view():
   dpg.configure_item(ADVANCED_CONTROLS_TAG, show=_advanced_view_active)
   dpg.configure_item(TOGGLE_ADVANCED_TAG, label="Show Basic View" if _advanced_view_active else "Show Advanced View")
   for p in _attach_points:
-    toggle_element(p.tag_base, refresh=True)
+    toggle_attach_point(p, refresh=True)
 
 def toggle_options():
   newoptions = not dpg.is_item_visible(EDITOR_OPTIONS_TAG)
@@ -961,7 +988,7 @@ def main(filename):
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      with dpg.group(horizontal=False, width=300, tag="filewidget") as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
+      with dpg.group(horizontal=False, width=300, tag=FILE_WIDGET_TAG) as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
         dpg.add_button(label="Open Gun For Editing", callback=open_import_dialog, tag="import button", show=True)
         with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + O")
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
@@ -1069,7 +1096,7 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_Z, callback=lambda: control_pressed() and revert_callback())
     # Ctrl + T = show attach point translate modal
     dpg.add_key_press_handler(key=dpg.mvKey_T, callback=lambda: control_pressed() and show_translate_modal())
-    # Ctrl + A = show attach point translate modal
+    # Ctrl + A = toggle animation
     dpg.add_key_press_handler(key=dpg.mvKey_A, callback=lambda: control_pressed() and toggle_animation())
     # Ctrl + Down = next file in picker
     dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: control_pressed() and next_file(1))
@@ -1088,10 +1115,10 @@ def main(filename):
       filename = None
   if filename is not None:
     load_gun_image(filename)
-    if os.path.exists(jf := filename.replace(".png", pref_ext())):
+    if os.path.exists(jf := filename.replace(EXT_PNG, pref_ext())):
       load_json_from_file(jf)
       last_file = jf
-    elif os.path.exists(jf := filename.replace(".png", alt_ext())):
+    elif os.path.exists(jf := filename.replace(EXT_PNG, alt_ext())):
       load_json_from_file(jf)
       last_file = jf
   else:
