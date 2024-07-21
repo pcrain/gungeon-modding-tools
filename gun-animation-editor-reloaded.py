@@ -60,6 +60,7 @@ _attach_point_dict   = { p.name : p for p in _attach_points}
 _attach_point_coords = { p.name : (0,0) for p in _attach_points}
 _active_attach_point = _attach_points[0]
 _advanced_view_active = False;
+_gui_scale = 1
 
 #Globals that should probably be refactored
 orig_width         = 0
@@ -104,7 +105,7 @@ class BetterListBox:
 
     cur_index             = 0
 
-    def __init__(self, items: list, width: int = 250, height: int = 70, parent: int | str = None, callback: callable = None):
+    def __init__(self, items: list, width: int = -1, height: int = -1, parent: int | str = None, callback: callable = None):
         parent = parent or dpg.last_container()
         self.callback = callback
         self.width    = width
@@ -205,6 +206,9 @@ class BetterListBox:
 
       self.cur_frame = (self.cur_frame + 1) % len(self.frames)
       self.scroll_and_invoke_callback(self.items[self.frames[self.cur_frame]])
+
+def preview_scale():
+  return PREVIEW_SCALE * _gui_scale
 
 def get_config_path():
   if 'APPDATA' in os.environ:
@@ -426,15 +430,15 @@ def pos_in_drawing_area(x, y):
   return x >= dx and x <= (dx+dw) and y >= dy and y <= (dy+dh)
 
 def fromJsonCoordinates(x,y):
-  canvas_height = PREVIEW_SCALE * float(orig_height)
-  canvasx = DRAWLIST_PAD + (x * (PREVIEW_SCALE * PIXELS_PER_TILE))
-  canvasy = DRAWLIST_PAD + canvas_height - (y * (PREVIEW_SCALE * PIXELS_PER_TILE)) # we have an inverted y axis
+  canvas_height = preview_scale() * float(orig_height)
+  canvasx = DRAWLIST_PAD + (x * (preview_scale() * PIXELS_PER_TILE))
+  canvasy = DRAWLIST_PAD + canvas_height - (y * (preview_scale() * PIXELS_PER_TILE)) # we have an inverted y axis
   return canvasx, canvasy
 
 def toJsonCoordinates(x,y):
-  canvas_height = PREVIEW_SCALE * float(orig_height)
-  jsonx = (x - DRAWLIST_PAD) / (PREVIEW_SCALE * PIXELS_PER_TILE)
-  jsony = (canvas_height - (y - DRAWLIST_PAD)) / (PREVIEW_SCALE * PIXELS_PER_TILE) # we have an inverted y axis
+  canvas_height = preview_scale() * float(orig_height)
+  jsonx = (x - DRAWLIST_PAD) / (preview_scale() * PIXELS_PER_TILE)
+  jsony = (canvas_height - (y - DRAWLIST_PAD)) / (preview_scale() * PIXELS_PER_TILE) # we have an inverted y axis
   return jsonx, jsony
 
 def redraw_attach_point(p):
@@ -454,13 +458,13 @@ def redraw_attach_point(p):
   dpg.push_container_stack(layer)
   center = _attach_point_coords[p.name]
   if get_config("show_hands") and ("hand" in p.tag_base):
-    # offset = center+PREVIEW_SCALE*(DRAWLIST_PAD,DRAWLIST_PAD)
-    offset = (center[0] - 2*PREVIEW_SCALE, center[1] - 2*PREVIEW_SCALE)
+    # offset = center+preview_scale()*(DRAWLIST_PAD,DRAWLIST_PAD)
+    offset = (center[0] - 2*preview_scale(), center[1] - 2*preview_scale())
     # dpg.draw_image(HAND_IMAGE_TAG, center=_attach_point_coords[p.name], tag=f"{p.tag_base} hand")
-    # dpg.draw_image(HAND_IMAGE_TAG, offset, offset + (4*PREVIEW_SCALE, 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
-    dpg.draw_image(HAND_IMAGE_PATH if "main" in p.tag_base else OFF_IMAGE_PATH, offset, (offset[0] + 4*PREVIEW_SCALE, offset[1] + 4*PREVIEW_SCALE), tag=f"{p.tag_base} circle")
+    # dpg.draw_image(HAND_IMAGE_TAG, offset, offset + (4*preview_scale(), 4*preview_scale()), tag=f"{p.tag_base} circle")
+    dpg.draw_image(HAND_IMAGE_PATH if "main" in p.tag_base else OFF_IMAGE_PATH, offset, (offset[0] + 4*preview_scale(), offset[1] + 4*preview_scale()), tag=f"{p.tag_base} circle")
   else:
-    dpg.draw_circle(center=center, radius=PREVIEW_SCALE, color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
+    dpg.draw_circle(center=center, radius=preview_scale(), color=BLACK, fill=p.color, tag=f"{p.tag_base} circle")
   dpg.pop_container_stack()
 
 def attach_point_enabled(p):
@@ -477,10 +481,10 @@ def move_hand_preview(x, y, p=None):
     return # return if our element is disabled
 
   # Round x and y values as necessary to snap to the grid
-  # x = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_width * PREVIEW_SCALE, round(x / PREVIEW_SCALE) * PREVIEW_SCALE))
-  # y = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_height * PREVIEW_SCALE, round(y / PREVIEW_SCALE) * PREVIEW_SCALE))
-  x = round(x / PREVIEW_SCALE) * PREVIEW_SCALE #NOTE: need to allow these to go offscreen for batch translating purposes
-  y = round(y / PREVIEW_SCALE) * PREVIEW_SCALE #NOTE: need to allow these to go offscreen for batch translating purposes
+  # x = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_width * preview_scale(), round(x / preview_scale()) * preview_scale()))
+  # y = max(DRAWLIST_PAD, min(DRAWLIST_PAD + orig_height * preview_scale(), round(y / preview_scale()) * preview_scale()))
+  x = round(x / preview_scale()) * preview_scale() #NOTE: need to allow these to go offscreen for batch translating purposes
+  y = round(y / preview_scale()) * preview_scale() #NOTE: need to allow these to go offscreen for batch translating purposes
 
   # Set the global coordinates (TODO: maybe don't use globals here)
   _attach_point_coords[p.name] = (x,y)
@@ -572,13 +576,13 @@ def load_scaled_image(filename):
   if (filename in image_cache):
     # print(f"using cached {filename}")
     (dpg_image, orig_width, orig_height) = image_cache[filename]
-    scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+    scaled_width, scaled_height = preview_scale() * orig_width, preview_scale() * orig_height
   else:
     pil_image = Image.open(filename)
     if pil_image.mode != "RGBA":
       pil_image = pil_image.convert(mode='RGBA')
     orig_width, orig_height = pil_image.size
-    scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+    scaled_width, scaled_height = preview_scale() * orig_width, preview_scale() * orig_height
     scaled_image = pil_image.resize((scaled_width, scaled_height), resample=Image.Resampling.NEAREST)
     dpg_image = np.frombuffer(scaled_image.tobytes(), dtype=np.uint8) / 255.0
     image_cache[filename] = (dpg_image, orig_width, orig_height)
@@ -605,7 +609,7 @@ def load_gun_image(filename):
 
   # Load and resize the image internally since pygui doesn't seem to support nearest neighbor scaling
   pil_image, orig_width, orig_height = load_scaled_image(filename)
-  scaled_width, scaled_height = PREVIEW_SCALE * orig_width, PREVIEW_SCALE * orig_height
+  scaled_width, scaled_height = preview_scale() * orig_width, preview_scale() * orig_height
 
   # Set our current file as appropriate
   old_dir      = current_dir
@@ -750,7 +754,15 @@ def toggle_jtk2d(switch, value):
 
 def toggle_high_dpi(switch, value):
   set_config("high_dpi", value)
-  dpg.set_global_font_scale(2.0 if value else 1.0)
+  resize_gui(reload = True)
+
+def resize_gui(reload = False):
+  global _gui_scale
+  _gui_scale = 2 if get_config("high_dpi") else 1
+  dpg.set_global_font_scale(_gui_scale)
+  dpg.configure_item("filewidget", width=_gui_scale * 300)
+  if reload:
+    load_gun_image(os.path.join(current_dir, current_file))
 
 def next_file(delta):
   file_box.change_item(delta)
@@ -870,9 +882,14 @@ def toggle_advanced_view():
   global _advanced_view_active
   _advanced_view_active = not dpg.is_item_visible("advanced controls")
   dpg.configure_item("advanced controls", show=_advanced_view_active)
-  dpg.configure_item("toggle advanced", label="Advanced View" if _advanced_view_active else "Basic View")
+  dpg.configure_item("toggle advanced", label="Show Basic View" if _advanced_view_active else "Show Advanced View")
   for p in _attach_points:
     toggle_element(p.tag_base, refresh=True)
+
+def toggle_options():
+  newoptions = not dpg.is_item_visible("editor options")
+  dpg.configure_item("editor options", show=newoptions)
+  dpg.configure_item("toggle options", label="Hide Options" if newoptions else "More Options")
 
 def main(filename):
   global orig_width, orig_height, file_box
@@ -911,13 +928,11 @@ def main(filename):
   with dpg.window(label="Files List", tag="mainwindow", width=ww, height=wh, no_resize=True, autosize=False, no_close=True, no_collapse=True, no_title_bar=True, no_move=True):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
-      # with dpg.group(horizontal=False, width=300, height=wh, tag="filewidget", tracked=True):
-      with dpg.group(horizontal=False, tag="filewidget") as filewidgetgroup:
-        with dpg.group(horizontal=True, tag="findbarandbutton") as findwidgetgroup:
-          dpg.add_button(label="Open", callback=open_import_dialog, tag="import button", show=True)
-          dpg.add_button(label="Refresh", callback=lambda: refresh_file_list(), tag=f"refresh files")
-          dpg.add_button(label="Options", callback=lambda: dpg.configure_item("editor options", show=not dpg.is_item_visible("editor options")), tag=f"toggle options")
-          dpg.add_button(label="Basic View", callback=toggle_advanced_view, tag="toggle advanced", show=True)
+      with dpg.group(horizontal=False, width=300, tag="filewidget") as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
+        dpg.add_button(label="Open Gun For Editing", callback=open_import_dialog, tag="import button", show=True)
+        dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
+        dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag="toggle advanced", show=True)
+        dpg.add_button(label="More Options", callback=toggle_options, tag=f"toggle options")
         with dpg.group(horizontal=False, tag="editor options", show=False):
           # dpg.add_separator()
           dpg.add_checkbox(label="Autosave on switch / exit", callback=lambda s, a: set_config("autosave", a), tag="config autosave")
@@ -928,12 +943,10 @@ def main(filename):
           dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag="config make_backups")
           dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag="config use_jtk2d")
           dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config("autoscroll", a), tag="config autoscroll")
-          dpg.add_checkbox(label="High DPI Display (beta)", callback=toggle_high_dpi, tag="config high_dpi")
-        #   dpg.add_button(label="F6", width=64, height=64, callback=lambda: print(""), tag=f"ding files")
-        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", width=300, callback=filter_files, tag="file search box") # can't set size???
-        # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, tracked=True, track_offset=0.5, callback=set_current_file_from_picker_box)
-        # dpg.add_listbox([], tag=FILE_PICKER_TAG, num_items=wh / LIST_ITEM_HEIGHT, callback=set_current_file_from_picker_box)
-        file_box = BetterListBox(items=[], width=300, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
+          dpg.add_checkbox(label="High DPI Display (WIP)", callback=toggle_high_dpi, tag="config high_dpi")
+        dpg.add_input_text(hint="Click here or Ctrl+F to filter files", callback=filter_files, tag="file search box") # can't set size???
+        # file_box = BetterListBox(items=[], width=300, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
+        file_box = BetterListBox(items=[], parent=filewidgetgroup, callback=set_current_file_from_picker_box)
 
       # Set up the rest our widget
       with dpg.group(horizontal=False, tag="rightwidget"):
@@ -1031,6 +1044,7 @@ def main(filename):
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
+  resize_gui()
   last_file = None
   if filename is None:
     filename = get_config("last_file") or None
