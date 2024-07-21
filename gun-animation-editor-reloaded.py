@@ -139,6 +139,7 @@ jconf = {
   (USE_JTK2D         := "use_jtk2d")         : True,
   (AUTOSCROLL        := "autoscroll")        : False,
   (HIGH_DPI          := "high_dpi")          : False,
+  (TOOLTIPS          := "show_tooltips")     : False,
   (LAST_FILE         := "last_file")         : None,
 }
 
@@ -628,6 +629,7 @@ def generate_controls(p):
   with dpg.group(horizontal=True, tag=apc_controls(p)):
     dpg.add_text(f"{name}: ",color=p.color)
     dpg.add_button(label=label, callback=lambda: toggle_attach_point(p), tag=apc_enabled(p))
+    with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text(f"Shortcut: Ctrl + {1 + _attach_points.index(p)}")
     colorize_button(apc_enabled(p), ENABLED_COLOR if label==ENABLED_STRING else DISABLED_COLOR)
     dpg.add_input_text(label="x", width=70, readonly=True, show=label==ENABLED_STRING, tag=apc_x(p), default_value="0.0000")
     dpg.add_input_text(label="y", width=70, readonly=True, show=label==ENABLED_STRING, tag=apc_y(p), default_value="0.0000")
@@ -812,6 +814,17 @@ def toggle_backups(switch, value):
 def toggle_jtk2d(switch, value):
   set_config(USE_JTK2D, value)
 
+_tooltips = []
+def auto_tooltip():
+  tt = f"auto tooltip {len(_tooltips)}"
+  _tooltips.append(tt)
+  return tt
+
+def toggle_tooltips(switch, value):
+  set_config(TOOLTIPS, value)
+  for tt in _tooltips:
+    dpg.configure_item(tt, show=value)
+
 def toggle_high_dpi(switch, value):
   set_config(HIGH_DPI, value)
   resize_gui(reload = True)
@@ -990,9 +1003,9 @@ def main(filename):
       # Set up our file picker box
       with dpg.group(horizontal=False, width=300, tag=FILE_WIDGET_TAG) as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
         dpg.add_button(label="Open Gun For Editing", callback=open_import_dialog, tag="import button", show=True)
-        with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + O")
+        with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: Ctrl + O")
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
-        with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: F5")
+        with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: F5")
         dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag=TOGGLE_ADVANCED_TAG, show=True)
         dpg.add_button(label="More Options", callback=toggle_options, tag=TOGGLE_OPTIONS_TAG)
         with dpg.group(horizontal=False, tag=EDITOR_OPTIONS_TAG, show=False):
@@ -1005,6 +1018,7 @@ def main(filename):
           dpg.add_checkbox(label="Make backups when batch translating", callback=toggle_backups, tag=config_tag(MAKE_BACKUPS))
           dpg.add_checkbox(label="Export as .jtk2d instead of .json", callback=toggle_jtk2d, tag=config_tag(USE_JTK2D))
           dpg.add_checkbox(label="Autoscroll file sidebar", callback=lambda s, a: set_config(AUTOSCROLL, a), tag=config_tag(AUTOSCROLL))
+          dpg.add_checkbox(label="Show Tooltips", callback=toggle_tooltips, tag=config_tag(TOOLTIPS))
           dpg.add_checkbox(label="High DPI Display (WIP)", callback=toggle_high_dpi, tag=config_tag(HIGH_DPI))
         dpg.add_input_text(hint="Click here or Ctrl+F to filter files", callback=filter_files, tag=FILE_SEARCH_BOX_TAG) # can't set size???
         # file_box = BetterListBox(items=[], width=300, height=wh-64, parent=filewidgetgroup, callback=set_current_file_from_picker_box)
@@ -1022,7 +1036,7 @@ def main(filename):
             with dpg.group(horizontal=True, tag=f"animation controls"):
               dpg.add_text(f" Animation: ")
               dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=ANIMATION_ENABLED_TAG)
-              with dpg.tooltip(dpg.last_item()): dpg.add_text("Shortcut: Ctrl + A")
+              with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: Ctrl + A")
               colorize_button(ANIMATION_ENABLED_TAG, DISABLED_COLOR)
               dpg.add_button(label="-5", callback=lambda: change_animation_speed(-5), tag=FPS_DOWN2_TAG, show=False)
               dpg.add_button(label="-1", callback=lambda: change_animation_speed(-1), tag=FPS_DOWN1_TAG, show=False)
@@ -1104,6 +1118,11 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: control_pressed() and next_file(-1))
     # F5 = refresh file list
     dpg.add_key_press_handler(key=dpg.mvKey_F5, callback=lambda: refresh_file_list())
+    # 1-4 = toggle attach points
+    dpg.add_key_press_handler(key=dpg.mvKey_1, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[0]))
+    dpg.add_key_press_handler(key=dpg.mvKey_2, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[1]))
+    dpg.add_key_press_handler(key=dpg.mvKey_3, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[2]))
+    dpg.add_key_press_handler(key=dpg.mvKey_4, callback=lambda: control_pressed() and toggle_attach_point(_attach_points[3]))
 
   # Load our initial file either from the command line, our config, or a file picker
   load_config()
