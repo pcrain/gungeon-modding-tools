@@ -750,8 +750,15 @@ def load_json_from_file(filename):
 def set_current_file_from_import_dialog(sender, app_data):
   dpg.configure_item(IMPORT_DIALOG_TAG, show=False)
 
+  items = app_data.get("selections",{}).items()
+  if len(items) == 0:
+    newpath = app_data.get("current_path", None)
+    if newpath is not None: # navigate to a new directory if we have no files selected
+      open_import_dialog(override_dir = newpath)
+    return
+
   stem = None
-  for _, filename in app_data.get("selections",{}).items():
+  for _, filename in items:
     stem = filename.replace(pref_ext(), "").replace(alt_ext(), "").replace(EXT_PNG,"")
     break
 
@@ -777,12 +784,14 @@ def set_current_file_from_picker_box(sender, file_stem):
       load_json_from_file(f"{fullpath}{alt_ext()}")
     clear_unsaved_changes()
 
-def open_import_dialog():
+def open_import_dialog(override_dir = None):
+  if override_dir is None:
+    override_dir = current_dir
   if dpg.does_item_exist(IMPORT_DIALOG_TAG):
     if dpg.does_item_exist(IMPORT_HANDLER_TAG):
       dpg.delete_item(IMPORT_HANDLER_TAG)
     dpg.delete_item(IMPORT_DIALOG_TAG)
-  with dpg.file_dialog(label="Open Gun PNG or JSON", width=700, height=400, modal=True, show=True, default_path=current_dir, callback=set_current_file_from_import_dialog, tag=IMPORT_DIALOG_TAG):
+  with dpg.file_dialog(label="Open Gun PNG or JSON", width=700, height=400, modal=True, show=True, default_path=override_dir, callback=set_current_file_from_import_dialog, tag=IMPORT_DIALOG_TAG):
     dpg.add_file_extension("Gungeon Data files {.png,.json,.jtk2d}", color=(0, 255, 255, 255))
     dpg.add_file_extension(EXT_PNG, color=(255, 255, 0, 255))
     dpg.add_file_extension(pref_ext(), color=(255, 0, 255, 255))
@@ -1013,7 +1022,7 @@ def main(filename):
     with dpg.group(horizontal=True, tag="topwidget"):
       # Set up our file picker box
       with dpg.group(horizontal=False, width=300, tag=FILE_WIDGET_TAG) as filewidgetgroup: # need vertical buttons or dpg doesn't size them properly
-        dpg.add_button(label="Open Gun For Editing", callback=open_import_dialog, tag="import button", show=True)
+        dpg.add_button(label="Open Gun For Editing", callback=lambda: open_import_dialog(), tag="import button", show=True)
         with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: Ctrl + O")
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
         with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: F5")
