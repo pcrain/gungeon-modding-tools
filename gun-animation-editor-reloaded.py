@@ -110,6 +110,7 @@ _attach_points  = [
 ]
 _attach_point_dict   = { p.name : p for p in _attach_points}
 _attach_point_coords = { p.name : (0,0) for p in _attach_points}
+_attach_point_int    = { p.internal_name : p for p in _attach_points}
 _active_attach_point = _attach_points[0]
 _advanced_view_active = False;
 _gui_scale = 1
@@ -261,10 +262,7 @@ class BetterListBox:
           if self.get_animation_root(dpg.get_item_label(item)) == cur_root:
             self.frames.append(i)
 
-      if self.root is None:
-        return
-      nframes = len(self.frames)
-      if nframes < 1:
+      if (self.root is None) or ((nframes := len(self.frames)) < 1):
         return
       self.cur_frame = (self.cur_frame + 1) % nframes
       self.scroll_and_invoke_callback(self.items[self.frames[self.cur_frame]])
@@ -711,7 +709,7 @@ def load_gun_image(filename):
   if changed_dir:
     refresh_file_list()
 
-  load_json_from_dict(get_default_gun_json(orig_width, orig_height))
+  load_json_from_dict(get_default_gun_json(orig_width, orig_height)) #TODO: can possibly be removed, i can't remember if this is a hack to make something work
   clear_unsaved_changes()
   set_config(LAST_FILE, filename)
 
@@ -720,24 +718,28 @@ def update_file_list(filelist):
     file_box.replace_items(filelist)
 
 def load_json_from_dict(jdata):
+  midx = (jdata.get("width", 0) // 2) / 16.0
+  midy = (jdata.get("height", 0) // 2) / 16.0
+  jpoints = jdata.get("attachPoints", [])
   # Temporarily disable all previews
   for p in _attach_points:
-    toggle_attach_point(p, override=False)
-
-  # Reenable previews for each defined attach point
-  for a in jdata.get("attachPoints", []):
-    if "position" not in a:
-      continue
-
-    for p in _attach_points:
+    toggle_attach_point(p, override=True)
+    found = False
+    for a in jpoints:
       if a["name"] != p.internal_name:
         continue
-      toggle_attach_point(p, override=True)
       px = a.get("position",{}).get("x", 0)
       py = a.get("position",{}).get("y", 0)
       cx, cy = fromJsonCoordinates(px,py)
       move_hand_preview(cx, cy, p)
+      found = True
       break
+    if found:
+      continue
+    # Disable previews for undefined attach points, and put the offsets at sane positios
+    cx, cy = fromJsonCoordinates(midx, midy)
+    move_hand_preview(cx, cy, p)
+    toggle_attach_point(p, override=False)
 
 def load_json_from_file(filename):
   # Load the JSON data
