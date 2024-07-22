@@ -91,7 +91,7 @@ THIN_WHITE        = (255, 255, 255, 64)
 DRAWLIST_PAD      = 64
 WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
-PASTE_BOX_INDENT  = 16
+PASTE_BOX_INDENT  = -1
 
 CachedImage     = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
 AttachPoint     = namedtuple('AttachPoint', ['tag_base', 'name', 'internal_name', 'color', 'shortcut', 'enabled_default'])
@@ -134,6 +134,8 @@ unsaved_changes    = False
 file_box           = None
 animation_on       = False
 animation_speed    = 30
+_tooltips          = []
+_advanced_tooltips = []
 
 #Config globals and defaults
 jconf = {
@@ -646,6 +648,8 @@ def generate_controls(p):
   label = p.enabled_default
   with dpg.group(horizontal=True, tag=apc_controls(p)):
     dpg.add_checkbox(label=f"Paste?", indent=PASTE_BOX_INDENT, default_value=True, tag=apc_paste(p))
+    with dpg.tooltip(dpg.last_item(), tag=advanced_tooltip(), show=False):
+      dpg.add_text(f"Whether the {p.internal_name} attach point should be pasted")
     dpg.add_text(f"{name}: ",color=p.color)
     dpg.add_button(label=label, callback=lambda: toggle_attach_point(p), tag=apc_enabled(p))
     with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text(f"Shortcut: Ctrl + {1 + _attach_points.index(p)}")
@@ -853,17 +857,6 @@ def toggle_backups(switch, value):
 def toggle_jtk2d(switch, value):
   set_config(USE_JTK2D, value)
 
-_tooltips = []
-def auto_tooltip():
-  tt = f"auto tooltip {len(_tooltips)}"
-  _tooltips.append(tt)
-  return tt
-
-def toggle_tooltips(switch, value):
-  set_config(TOOLTIPS, value)
-  for tt in _tooltips:
-    dpg.configure_item(tt, show=value)
-
 def toggle_high_dpi(switch, value):
   set_config(HIGH_DPI, value)
   resize_gui(reload = True)
@@ -1005,6 +998,23 @@ def no_modal_open():
   # print(dpg.get_item_state(MAIN_WINDOW_TAG))
   # return dpg.get_item_state(MAIN_WINDOW_TAG)["focused"]
 
+def auto_tooltip():
+  tt = f"auto tooltip {len(_tooltips)}"
+  _tooltips.append(tt)
+  return tt
+
+def advanced_tooltip():
+  tt = f"advanced tooltip {len(_advanced_tooltips)}"
+  _advanced_tooltips.append(tt)
+  return tt
+
+def toggle_tooltips(switch, value):
+  set_config(TOOLTIPS, value)
+  for tt in _tooltips:
+    dpg.configure_item(tt, show=value)
+  for tt in _advanced_tooltips:
+    dpg.configure_item(tt, show=value and _advanced_view_active)
+
 def toggle_advanced_view():
   global _advanced_view_active
   _advanced_view_active = not dpg.is_item_visible(ADVANCED_CONTROLS_TAG)
@@ -1014,6 +1024,10 @@ def toggle_advanced_view():
   for p in _attach_points:
     toggle_attach_point(p, refresh=True)
   dpg.configure_item(ANIM_BUTTON_PAD, show=_advanced_view_active)
+
+  tooltips_active = get_config(TOOLTIPS)
+  for tt in _advanced_tooltips:
+    dpg.configure_item(tt, show=_advanced_view_active and tooltips_active)
 
 def toggle_options():
   newoptions = not dpg.is_item_visible(EDITOR_OPTIONS_TAG)
@@ -1039,7 +1053,8 @@ def main(filename):
 
   # Set up dearpygui
   dpg.create_context()
-  dpg.create_viewport(title=f"Enter the Gungeon - {PROGRAM_TITLE} - v{PROGRAM_VERSION}", x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
+  # dpg.create_viewport(title=f"Enter the Gungeon - {PROGRAM_TITLE} - v{PROGRAM_VERSION}", x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
+  dpg.create_viewport(title=f"{PROGRAM_TITLE} - v{PROGRAM_VERSION}", x_pos=WINDOW_PAD, y_pos=WINDOW_PAD, width=ww, height=wh, resizable=False)
   dpg.setup_dearpygui()
 
   # Load necessary assets
