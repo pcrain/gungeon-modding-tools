@@ -71,6 +71,7 @@ IMPORT_DIALOG_TAG = "import dialog"
 IMPORT_HANDLER_TAG = "import keyboard handler"
 FILE_WIDGET_TAG = "filewidget"
 PASTE_OPTIONS_TAG = "paste options"
+ANIM_BUTTON_PAD = "animation padding"
 
 # Misc
 ENABLED_STRING    = " Enabled" #note the space
@@ -89,6 +90,7 @@ THIN_WHITE        = (255, 255, 255, 64)
 DRAWLIST_PAD      = 64
 WINDOW_PAD        = 100
 DRAW_INNER_BORDER = False
+PASTE_BOX_INDENT  = 16
 
 CachedImage     = namedtuple('CachedImage', ['name', 'data', 'width', 'height'])
 AttachPoint     = namedtuple('AttachPoint', ['tag_base', 'name', 'internal_name', 'color', 'shortcut', 'enabled_default'])
@@ -143,6 +145,7 @@ jconf = {
   (AUTOSCROLL        := "autoscroll")        : False,
   (HIGH_DPI          := "high_dpi")          : False,
   (TOOLTIPS          := "show_tooltips")     : False,
+  (ADVANCED_VIEW     := "advanced_view")     : False,
   (LAST_FILE         := "last_file")         : None,
 }
 
@@ -380,7 +383,7 @@ def copy_state():
   global clipboard, clipboard_file
   clipboard = get_json_for_current_gun()
   dpg.set_value(PASTE_FILENAME_TAG, f"from {current_file}")
-  dpg.configure_item(PASTE_OPTIONS_TAG, show=True)
+  # dpg.configure_item(PASTE_OPTIONS_TAG, show=True)
 
 def paste_state():
   if clipboard is not None:
@@ -494,6 +497,7 @@ def revert_callback():
     jsonpath = fullpath.replace(EXT_PNG, alt_ext())
   if os.path.exists(jsonpath):
     load_json_from_file(jsonpath)
+  clear_unsaved_changes()
 
 def pos_in_drawing_area(x, y):
   dx, dy = dpg.get_item_rect_min(DRAWLIST_TAG)
@@ -609,6 +613,7 @@ def change_active_attach_point(sender, app_data):
 def toggle_attach_point(p, override=None, refresh=False):
   cur_enabled = dpg.get_item_label(apc_enabled(p)) == ENABLED_STRING
   new_enabled = cur_enabled if refresh else (not cur_enabled) if override is None else override
+  dpg.configure_item(apc_paste(p), show=_advanced_view_active)
   dpg.configure_item(apc_x(p), show=new_enabled and _advanced_view_active)
   dpg.configure_item(apc_y(p), show=new_enabled and _advanced_view_active)
   dpg.configure_item(apc_shortcut(p), show=new_enabled) #
@@ -618,7 +623,8 @@ def toggle_attach_point(p, override=None, refresh=False):
   layer = apc_layer(p)
   if dpg.does_alias_exist(layer):
     dpg.configure_item(layer, show=new_enabled)
-  mark_unsaved_changes()
+  if not refresh:
+    mark_unsaved_changes()
 
 def toggle_animation(override=None):
   global animation_on
@@ -638,6 +644,7 @@ def generate_controls(p):
   tag_base = p.tag_base
   label = p.enabled_default
   with dpg.group(horizontal=True, tag=apc_controls(p)):
+    dpg.add_checkbox(label=f"Paste?", indent=PASTE_BOX_INDENT, default_value=True, tag=apc_paste(p))
     dpg.add_text(f"{name}: ",color=p.color)
     dpg.add_button(label=label, callback=lambda: toggle_attach_point(p), tag=apc_enabled(p))
     with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text(f"Shortcut: Ctrl + {1 + _attach_points.index(p)}")
@@ -998,10 +1005,12 @@ def no_modal_open():
 def toggle_advanced_view():
   global _advanced_view_active
   _advanced_view_active = not dpg.is_item_visible(ADVANCED_CONTROLS_TAG)
+  set_config(ADVANCED_VIEW, _advanced_view_active)
   dpg.configure_item(ADVANCED_CONTROLS_TAG, show=_advanced_view_active)
   dpg.configure_item(TOGGLE_ADVANCED_TAG, label="Show Basic View" if _advanced_view_active else "Show Advanced View")
   for p in _attach_points:
     toggle_attach_point(p, refresh=True)
+  dpg.configure_item(ANIM_BUTTON_PAD, show=_advanced_view_active)
 
 def toggle_options():
   newoptions = not dpg.is_item_visible(EDITOR_OPTIONS_TAG)
@@ -1051,6 +1060,7 @@ def main(filename):
         dpg.add_button(label="Refresh Gun List", callback=lambda: refresh_file_list(), tag=f"refresh files")
         with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: F5")
         dpg.add_button(label="Show Advanced View", callback=toggle_advanced_view, tag=TOGGLE_ADVANCED_TAG, show=True)
+        with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: Ctrl + Tab")
         dpg.add_button(label="More Options", callback=toggle_options, tag=TOGGLE_OPTIONS_TAG)
         with dpg.group(horizontal=False, tag=EDITOR_OPTIONS_TAG, show=False):
           # dpg.add_separator()
@@ -1078,6 +1088,7 @@ def main(filename):
               generate_controls(p)
             # dpg.add_text(f"")
             with dpg.group(horizontal=True, tag=f"animation controls"):
+              dpg.add_checkbox(label=f"      ", indent=PASTE_BOX_INDENT, tag=ANIM_BUTTON_PAD, show=False) # dummy button to get things to line up
               dpg.add_text(f" Animation: ")
               dpg.add_button(label=DISABLED_STRING, callback=lambda: toggle_animation(), tag=ANIMATION_ENABLED_TAG)
               with dpg.tooltip(dpg.last_item(), tag=auto_tooltip()): dpg.add_text("Shortcut: Ctrl + A")
@@ -1089,44 +1100,44 @@ def main(filename):
               dpg.add_button(label="+5", callback=lambda: change_animation_speed(5), tag=FPS_UP2_TAG, show=False)
 
           # Set up our config / import / export / copy buttons
-          with dpg.group(horizontal=False, tag=ADVANCED_CONTROLS_TAG, show=False):
-            dpg.add_text(f"Working Dir: ", tag=IMAGE_PATH_TAG)
-            dpg.add_text(f"Image Name:  ", tag=IMAGE_NAME_TAG)
-            dpg.add_text(f"Image Size:  0 x 0 pixels", tag=IMAGE_SIZE_TAG)
-            # Save button
-            with dpg.group(horizontal=True):
-              dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
-              # with modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_TAG, show=False)
-              colorize_button(EXPORT_BUTTON_TAG, (0,128,128,255))
-              # without modal
-              dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_NP_TAG, show=False)
-              colorize_button(EXPORT_BUTTON_NP_TAG, (0,128,128,255))
-              dpg.add_button(label="No Changes To Save", callback=export_callback, tag=NO_EXPORT_BUTTON_TAG, show=False)
-            # Revert button
-            with dpg.group(horizontal=True):
-              dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Revert Changes", callback=revert_callback, tag=REVERT_BUTTON_TAG, show=False)
-              colorize_button(REVERT_BUTTON_TAG, (128,64,64,255))
-              dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag=NO_REVERT_BUTTON_TAG, show=False)
-            # Translate Button
-            with dpg.group(horizontal=True, tag="translate box"):
-              dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
-            # Copy Button
-            with dpg.group(horizontal=True):
-              dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
-            # Paste Button
-            with dpg.group(horizontal=True, tag="paste box"):
-              dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
-              dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
-              dpg.add_text("", tag=PASTE_FILENAME_TAG)
-            with dpg.group(horizontal=False, tag=PASTE_OPTIONS_TAG, show=False):
-              for p in _attach_points:
-                with dpg.group(horizontal=True, tag=f"{p.tag_base} option container", show=True):
-                  dpg.add_checkbox(label=f"Paste", indent=16, default_value=True, tag=apc_paste(p))
-                  dpg.add_text(p.name.strip(), color=p.color)
+          with dpg.group(horizontal=True, tag=ADVANCED_CONTROLS_TAG, show=False):
+            #Advanced Buttons
+            with dpg.group(horizontal=False, tag="Advanced Buttons"):
+              # Save button
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+S", color=SHORTCUT_COLOR)
+                # with modal
+                dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_TAG, show=False)
+                colorize_button(EXPORT_BUTTON_TAG, (0,128,128,255))
+                # without modal
+                dpg.add_button(label="Save Changes", callback=export_callback, tag=EXPORT_BUTTON_NP_TAG, show=False)
+                colorize_button(EXPORT_BUTTON_NP_TAG, (0,128,128,255))
+                dpg.add_button(label="No Changes To Save", callback=export_callback, tag=NO_EXPORT_BUTTON_TAG, show=False)
+              # Revert button
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+Z", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Revert Changes", callback=revert_callback, tag=REVERT_BUTTON_TAG, show=False)
+                colorize_button(REVERT_BUTTON_TAG, (128,64,64,255))
+                dpg.add_button(label="No Changes To Revert", callback=revert_callback, tag=NO_REVERT_BUTTON_TAG, show=False)
+              # Translate Button
+              with dpg.group(horizontal=True, tag="translate box"):
+                dpg.add_text("Ctrl+T", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Translate Gun Data", callback=show_translate_modal, tag="translate button")
+              # Copy Button
+              with dpg.group(horizontal=True):
+                dpg.add_text("Ctrl+C", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Copy Gun Data", callback=copy_state, tag="copy button")
+              # Paste Button
+              with dpg.group(horizontal=True, tag="paste box"):
+                dpg.add_text("Ctrl+V", color=SHORTCUT_COLOR)
+                dpg.add_button(label="Paste Gun Data", callback=paste_state, tag="paste button")
+                dpg.add_text("", tag=PASTE_FILENAME_TAG)
+
+            # Advanced Info
+            with dpg.group(horizontal=False, tag="Advanced Data"):
+              dpg.add_text(f"Working Dir: ", tag=IMAGE_PATH_TAG)
+              dpg.add_text(f"Image Name:  ", tag=IMAGE_NAME_TAG)
+              dpg.add_text(f"Image Size:  0 x 0 pixels", tag=IMAGE_SIZE_TAG)
 
         # Set up the main drawing list
         with dpg.drawlist(width=1, height=1, tag=DRAWLIST_TAG):
@@ -1165,6 +1176,8 @@ def main(filename):
     dpg.add_key_press_handler(key=dpg.mvKey_Down, callback=lambda: no_modal_open() and control_pressed() and next_file(1))
     # Ctrl + Up = previous file in picker
     dpg.add_key_press_handler(key=dpg.mvKey_Up, callback=lambda: no_modal_open() and control_pressed() and next_file(-1))
+    # Ctrl + Tab = toggle advanced view
+    dpg.add_key_press_handler(key=dpg.mvKey_Tab, callback=lambda: no_modal_open() and control_pressed() and toggle_advanced_view())
     # F5 = refresh file list
     dpg.add_key_press_handler(key=dpg.mvKey_F5, callback=lambda: no_modal_open() and refresh_file_list())
     # 1-4 = toggle attach points
@@ -1189,6 +1202,8 @@ def main(filename):
     elif os.path.exists(jf := filename.replace(EXT_PNG, alt_ext())):
       load_json_from_file(jf)
       last_file = jf
+    if get_config(ADVANCED_VIEW):
+      toggle_advanced_view()
   else:
     open_import_dialog()
 
