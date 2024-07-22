@@ -28,7 +28,7 @@ def resource_path(relative_path):
 # Core
 PROGRAM_NAME      = "gun-animation-editor-reloaded"
 PROGRAM_TITLE     = "Gun Animation Editor Reloaded"
-PROGRAM_VERSION   = "0.9.1"
+PROGRAM_VERSION   = "0.9.2"
 PREVIEW_SCALE     = 8 # magnification factor for preview
 PIXELS_PER_TILE   = 16.0 # Unity / Gungeon scaling factor for sprites
 
@@ -45,6 +45,7 @@ TOGGLE_OPTIONS_TAG         = "toggle options"
 EDITOR_OPTIONS_TAG         = "editor options"
 ADVANCED_CONTROLS_TAG      = "advanced controls"
 IMAGE_PATH_TAG             = "image path"
+IMAGE_PATH_TOOLTIP_TAG     = "image path tooltip"
 IMAGE_NAME_TAG             = "image name"
 IMAGE_SIZE_TAG             = "image size"
 EXPORT_BUTTON_NP_TAG       = "export button noprompt"
@@ -700,8 +701,10 @@ def load_gun_image(filename):
   current_file = os.path.basename(filename)
 
   # Refresh all of our canvas and metadata data
-  dpg.set_value(IMAGE_PATH_TAG, f"Working Dir: {current_dir}")
-  dpg.set_value(IMAGE_NAME_TAG, f"Image Name:  {current_file}")
+  if dpg.does_alias_exist(IMAGE_PATH_TOOLTIP_TAG):
+    dpg.delete_item(IMAGE_PATH_TOOLTIP_TAG)
+  dpg.set_value(IMAGE_NAME_TAG, f"Image Name:  {current_file} (hover for full path)")
+  with dpg.tooltip(IMAGE_NAME_TAG, tag=IMAGE_PATH_TOOLTIP_TAG): dpg.add_text(os.path.join(current_dir,current_file), color=SHORTCUT_COLOR)
   dpg.set_value(IMAGE_SIZE_TAG, f"Image Size:  {orig_width} x {orig_height} pixels")
   dpg.configure_item(DRAWLIST_TAG, width=DRAWLIST_PAD*2+scaled_width, height=DRAWLIST_PAD*2+scaled_height)
   if dpg.does_alias_exist(GUN_LAYER_TAG):
@@ -1135,7 +1138,6 @@ def main(filename):
 
             # Advanced Info
             with dpg.group(horizontal=False, tag="Advanced Data"):
-              dpg.add_text(f"Working Dir: ", tag=IMAGE_PATH_TAG)
               dpg.add_text(f"Image Name:  ", tag=IMAGE_NAME_TAG)
               dpg.add_text(f"Image Size:  0 x 0 pixels", tag=IMAGE_SIZE_TAG)
 
