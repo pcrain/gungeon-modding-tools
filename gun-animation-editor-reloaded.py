@@ -226,7 +226,7 @@ class BetterListBox:
         dpg.bind_item_theme(sender, self.button_selected_theme)
         if get_config(AUTOSCROLL) or self.force_autoscroll:
           self.force_autoscroll = False
-          dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2))
+          dpg.set_y_scroll(self.custom_listbox, max(0,dpg.get_item_state(sender)["pos"][1] - self.height / 2)) #BUG: we no longer have a real height, so this is no longer centered
 
     def scroll_to_specific_item(self, itemname):
         truename = os.path.basename(itemname).replace(pref_ext(), "").replace(alt_ext() ,"")
@@ -1034,8 +1034,9 @@ def toggle_options():
   dpg.configure_item(EDITOR_OPTIONS_TAG, show=newoptions)
   dpg.configure_item(TOGGLE_OPTIONS_TAG, label="Hide Options" if newoptions else "More Options")
 
+win_height = 0
 def main(filename):
-  global orig_width, orig_height, file_box
+  global orig_width, orig_height, file_box, win_height
 
   # Make sure we actually have a valid filename passed (or None)
   if (filename is not None) and (not os.path.exists(filename)):

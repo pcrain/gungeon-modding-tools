@@ -118,6 +118,8 @@ else:
     help=f"name of output bank; puts in {col.YLW}input_path{col.BLN} unless absolute path is given")
 parser.add_argument("-v", "--verbose",   action="store_true",
   help=f"print verbose information")
+parser.add_argument("-q", "--quiet",   action="store_true",
+  help=f"hide warnings, only show errors")
 parser.add_argument("-s", "--spreadsheet",
   help=f"load sound effect information from {col.YLW}spreadsheet{col.BLN}; creates an example spreadsheet if none exists")
 parser.add_argument("-r", "--recursive", action="store_true",
@@ -164,6 +166,10 @@ DUMP_WAV_FILES = False
 #Verbose printing
 def vprint(*listargs, **kwargs):
   if args.verbose:
+    print(*listargs, **kwargs)
+
+def warn(*listargs, **kwargs):
+  if not args.quiet:
     print(*listargs, **kwargs)
 
 #Play raw WEM data (from a Ref) using PyAudio
@@ -772,6 +778,8 @@ class WEMParser(Parser):
     root["channels"]        = 2 #hack: all sound must be stereo
     root["sample_width"]    = sampwidth*8
     root["sample_rate"]     = channels*rate//2 #hack: halve sample rate for mono files to compensate
+    if rate < 16000 and channels == 1: #mono tracks with low sample rates have been known to be pitch shiften in game, so issue a warning here
+      warn(f"WARNING: mono sound {file} is {rate}hz, less than minimum supported 16000hz.")
 
     # vprint(f"Data: rate={rate}, channels={channels}, frames={total}, width={sampwidth}")
 
