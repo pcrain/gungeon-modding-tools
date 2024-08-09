@@ -808,6 +808,7 @@ class BNKParser(Parser):
     "volume"  : 1.0,
     "loops"   : 1,
     "channel" : "sound", #can also be "music" (and hopefully, in the future, "ui"))
+    "limit"   : 0, #limit to number of sounds that can be simulatneously played
   }
 
   def __init__(self):
@@ -1106,7 +1107,7 @@ class BNKParser(Parser):
     loop["num_loops"] = num_loops #number of loops (0 == infinite)
     h["subseclen"] += 5
 
-  def addHircSFX(self,sfx_id,wfi,isOgg):
+  def addHircSFX(self,sfx_id,wfi,isOgg,limit):
     h                         = Ref({})
     h["type"]                 = HIRC_TYPE_SFX
     h["subseclen"]            = 43 #minimum length of subsection
@@ -1131,9 +1132,9 @@ class BNKParser(Parser):
     h["num_range_modifiers"]  = 0
     h["positioning_data"]     = 7
     h["aux_params"]           = 0
-    h["priority_tiebreak"]    = 0
+    h["priority_tiebreak"]    = 8 # 0 == follow parent, 8 == ignore parent, destroy oldest, 9 == ignore parent, destroy newest
     h["virt_queue_behavior"]  = 1
-    h["max_sounds"]           = 0
+    h["max_sounds"]           = limit # 0
     h["below_thres_behavior"] = 0
     h["envelope"]             = 0
     h["num_state_props"]      = 0
@@ -1260,7 +1261,7 @@ class BNKParser(Parser):
     root["wemfiledata"].append(wp.root.val)
 
     # Create the hirc SFX data
-    sfx = self.addHircSFX(sfx_id,wfi,isOgg=isOgg)
+    sfx = self.addHircSFX(sfx_id,wfi,isOgg=isOgg,limit=sound_params.get("limit",0))
     self.addDefaultVolumeParamToSFX(sfx,volume=sound_params.get("volume",1.0))
     self.addDefaultLoopParamToSFX(sfx,num_loops=sound_params.get("loops",1))
     self.addDefaultVolumeRTPCToSFX(sfx)
@@ -1341,9 +1342,10 @@ def loadSoundParamsFromCSV(csvfile):
       header = [s.strip() for s in next(reader)]
       ddict = {}
       for row in reader:
-        if len(row) < len(header):
+        if len(row) == 0:
           continue
-        ddict[row[0].strip()] = {header[i] : row[i].strip() for i in range(1,len(header))}
+        minlen = min(len(row), len(header))
+        ddict[row[0].strip()] = {header[i] : row[i].strip() for i in range(1, minlen)}
     return ddict
 
 def main():
