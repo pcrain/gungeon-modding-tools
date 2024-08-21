@@ -1,5 +1,11 @@
 ## Modded Enter the Gungeon Setup for Steam Deck / Linux
 
+
+### Prerequisites
+
+- Make sure the appropriate `mono` / `libmono` package for your distro is installed:
+    + Arch: `sudo pacman -S mono`
+
 ### Installing
 
 - Download [the Steam Deck installation script](https://raw.githubusercontent.com/pcrain/gungeon-modding-tools/master/steamdeck-installer.sh) into an empty directory somewhere on your file system:
