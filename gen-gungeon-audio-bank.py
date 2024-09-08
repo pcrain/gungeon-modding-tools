@@ -3,7 +3,7 @@
 #  Run with -h flag for usage information
 #  Note: volume is measured in dB gain, not percentage
 
-ALLOW_AUTORUN = False # change to true if you wish to allow this script to autogenerate sound files when ran without arguments
+ALLOW_AUTORUN = True # change to False if you don't wish to allow this script to autogenerate sound files when ran without arguments
 
 #References:
 #  - BNK File Format: https://wiki.xentax.com/index.php/Wwise_SoundBank_(*.bnk)
@@ -805,7 +805,7 @@ class WEMParser(Parser):
 # Parser for Gungeon BNK Data
 class BNKParser(Parser):
   default_sound_params = {
-    "volume"  : 1.0,
+    "volume"  : 0.0,
     "loops"   : 1,
     "channel" : "sound", #can also be "music" (and hopefully, in the future, "ui"))
     "limit"   : 0, #limit to number of sounds that can be simulatneously played
