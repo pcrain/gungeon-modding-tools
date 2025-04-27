@@ -14,6 +14,7 @@ def findSprites(decomp_path):
       fpath = os.path.join(root, f)
       if not fpath.endswith(".annotated"):
         continue
+      # print(f"checking {fpath}")
       with open(fpath, 'r') as fin:
         lines = fin.read().split("\n")
       colname = None
@@ -49,6 +50,7 @@ def findAnims(decomp_path, colSprites):
             lastcol = line.split("#")[-1].replace(".prefab","").strip()
           elif line.startswith("      spriteId:"): # exactly two spaces is important
             sid = int(line.split(":")[1].strip())
+            # print(f"used sprite {colSprites[lastcol][sid][0]} in anim {anim}")
             colSprites[lastcol][sid][1] = USED_SPRITE
             tup = [lastcol, sid, colSprites[lastcol][sid]]
             # print(f"    {tup}")
@@ -107,14 +109,26 @@ def main():
 
   decomp_path = sys.argv[1]
   colSprites = findSprites(decomp_path)
+  # for k,v in colSprites.items():
+  #   print(f"{k}: {v}")
+  # print(f"found sprite {spritename} in collection {colname}")
   # print("\n\n\n")
   libAnims = findAnims(decomp_path, colSprites)
   # print("\n\n\n")
   findAnimators(decomp_path, libAnims)
 
+  for coll, collitems in libAnims.items():
+    for n,anim in enumerate(collitems):
+      if anim[2] != USED_NEVER:
+        continue
+      print(f"  {anim[0]} (#{n} from {coll}) is UNUSED, and uses the following sprites")
+      for i in range(len(anim[1])):
+        print(f"    {anim[1][i][2]} (#{anim[1][i][1]} in {anim[1][i][0]})")
+
   for col, sprites in colSprites.items():
     print(f"unused sprites in {col}:")
     for sprite in sprites:
+      # print(f"checking {sprite}")
       if len(sprite[0]) == 0:
         continue
       if "/" in sprite[0]:
@@ -122,12 +136,6 @@ def main():
       if sprite[1] > 0:
         continue
       print(f"  {sprite[0].strip()}")
-
-  # for coll,collitems in libAnims.items():
-  #   print(f"in collection {coll}:")
-  #   for item in collitems:
-  #     print(f"{item}")
-  #   break
 
 if __name__ == "__main__":
   main()
