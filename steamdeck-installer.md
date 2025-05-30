@@ -5,15 +5,20 @@
 
 - Make sure the appropriate `mono` / `libmono` package for your distro is installed:
     + Arch: `sudo pacman -S mono`
+- If you get a "could not lock database: Read-only file system" error on Steam Deck, you will need to run the following additional commands:
+  ```
+    sudo steamos-readonly disable
+    echo "keyserver hkps://keyserver.ubuntu.com" | sudo tee -a /etc/pacman.d/gnupg/gpg.conf
+    sudo pacman-key --init
+    sudo pacman-key --populate
+    sudo pacman-key --refresh-keys
+  ```
 
 ### Installing
 
-- Download [the Steam Deck installation script](https://raw.githubusercontent.com/pcrain/gungeon-modding-tools/master/steamdeck-installer.sh) into an empty directory somewhere on your file system:
-- Open a terminal in the directory containing the above script, and run the following commands:
+- Open a terminal and run the following command:
   ```
-    chmod +x ./steamdeck-installer.sh # make the script executable
-
-    ./steamdeck-installer.sh # actually run the script
+    bash <(wget -qO- https://raw.githubusercontent.com/pcrain/gungeon-modding-tools/master/steamdeck-installer.sh)
   ```
 - Follow the remaining instructions and prompts on screen.
 

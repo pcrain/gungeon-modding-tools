@@ -707,7 +707,7 @@ class WEMParser(Parser):
     root["channels"]         = None
     root["sample_rate"]      = None
     root["avg_byte_rate"]    = None
-    root["block_align"]      = 0 if isOgg else 4
+    root["block_align"]      = 0 if isOgg else None
     root["sample_width"]     = 0 if isOgg else None
     root["extra_bytes"]      = int(root["fmt_size"]) - 18
     root["extra_unk"]        = 0
@@ -723,7 +723,8 @@ class WEMParser(Parser):
       root["ogg_blocksize_0_pow"]           = 8
       root["ogg_blocksize_1_pow"]           = 11
     else:
-      root["valid_bits"]       = 12546
+      root["valid_bits"]       = 12546 # stereo
+      # root["valid_bits"]       = 16641 # mono
     root["junk_header"]      = b"JUNK"
     root["junk_size"]        = 4
     root["junk_data"]        = b'\0\0\0\0'
@@ -775,15 +776,21 @@ class WEMParser(Parser):
 
     wavdata   = wf.readframes(total)
 
-    root["channels"]        = 2 #hack: all sound must be stereo
-    root["sample_width"]    = sampwidth*8
-    root["sample_rate"]     = channels*rate//2 #hack: halve sample rate for mono files to compensate
-    if rate < 16000 and channels == 1: #mono tracks with low sample rates have been known to be pitch shiften in game, so issue a warning here
+    root["channels"]        = channels
+    root["sample_width"]    = sampwidth*8 # sample_width is encoded in bits, not bytes
+    root["sample_rate"]     = rate
+    if rate < 16000 and channels == 1: #mono tracks with low sample rates have been known to be pitch shifted in game, so issue a warning here
       warn(f"WARNING: mono sound {file} is {rate}hz, less than minimum supported 16000hz.")
 
     # vprint(f"Data: rate={rate}, channels={channels}, frames={total}, width={sampwidth}")
 
+    # stereo: 12546 == 0110001 00000010
+    #   mono: 16641 == 1000001 00000001
+    root["valid_bits"]      = 12546 if (channels == 2) else 16641 #TODO: figure out what these magic bits do...
+    root["block_align"]     = channels * sampwidth
+
     root["avg_byte_rate"]   = 0 # unnecessary #sampwidth * rate * channels
+    # root["avg_byte_rate"]   = sampwidth * rate * channels
 
     root["data_chunk_size"] = len(wavdata)
     root["wav_data"]        = wavdata
@@ -906,6 +913,8 @@ class BNKParser(Parser):
           t = h["param_type_list"][j]
           if t == 0: #volume
             bs.asFloat(p["volume"],tag=f"SFX {i} param {j} volume (float)")
+          # elif t == 2: #pitch # doesn't work yet
+          #   bs.asSigned(p["pitch"],tag=f"SFX {i} param {j} pitch (float)")
           elif t == 58: #loop
             bs.asSigned(p["num_loops"],tag=f"SFX {i} param {j} num loops (float, 0 == inf)")
           else:
@@ -1100,6 +1109,14 @@ class BNKParser(Parser):
     vol["volume"] = volume #volume value
     h["subseclen"] += 5
 
+  def addDefaultPitchParamToSFX(self,h,pitch=0.0):
+    return # doesn't work
+    # h["num_params"] += 1
+    # h["param_type_list"].append(2) #pitch type
+    # p = h["param_list"].next()
+    # p["pitch"] = pitch #pitch value
+    # h["subseclen"] += 5
+
   def addDefaultLoopParamToSFX(self,h,num_loops=1):
     h["num_params"] += 1
     h["param_type_list"].append(58) #loop type
@@ -1263,6 +1280,7 @@ class BNKParser(Parser):
     # Create the hirc SFX data
     sfx = self.addHircSFX(sfx_id,wfi,isOgg=isOgg,limit=sound_params.get("limit",0))
     self.addDefaultVolumeParamToSFX(sfx,volume=sound_params.get("volume",1.0))
+    # self.addDefaultPitchParamToSFX(sfx,pitch=sound_params.get("pitch",0.0)) # doesn't work
     self.addDefaultLoopParamToSFX(sfx,num_loops=sound_params.get("loops",1))
     self.addDefaultVolumeRTPCToSFX(sfx)
     self.updateHircMetadataFromRef(sfx)

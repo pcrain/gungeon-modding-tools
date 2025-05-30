@@ -580,7 +580,7 @@ def move_hand_preview(x, y, p=None):
 
 def on_plot_clicked(sender, app_data):
   toggle_animation(False)
-  if dpg.is_key_down(dpg.mvKey_Shift):
+  if dpg.is_key_down(dpg.mvKey_LShift):
     p=_attach_point_dict[LABEL_CLIP]
   else:
     p=_attach_point_dict[LABEL_MAIN_HAND]
@@ -590,7 +590,7 @@ def on_plot_clicked(sender, app_data):
 
 def on_plot_right_clicked(sender, app_data):
   toggle_animation(False)
-  if dpg.is_key_down(dpg.mvKey_Shift):
+  if dpg.is_key_down(dpg.mvKey_LShift):
     p=_attach_point_dict[LABEL_CASING]
   else:
     p=_attach_point_dict[LABEL_OFF_HAND]
@@ -981,7 +981,7 @@ def hide_translate_modal():
     dpg.delete_item(TRANSLATE_MODAL_TAG)
 
 def control_pressed():
-  return dpg.is_key_down(dpg.mvKey_Control) or dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
+  return dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
 def item_or_child_focused(t):
   state = dpg.get_item_state(t)
