@@ -580,7 +580,7 @@ def move_hand_preview(x, y, p=None):
 
 def on_plot_clicked(sender, app_data):
   toggle_animation(False)
-  if dpg.is_key_down(dpg.mvKey_LShift):
+  if dpg.is_key_down(dpg.mvKey_ModShift):
     p=_attach_point_dict[LABEL_CLIP]
   else:
     p=_attach_point_dict[LABEL_MAIN_HAND]
@@ -590,7 +590,7 @@ def on_plot_clicked(sender, app_data):
 
 def on_plot_right_clicked(sender, app_data):
   toggle_animation(False)
-  if dpg.is_key_down(dpg.mvKey_LShift):
+  if dpg.is_key_down(dpg.mvKey_ModShift):
     p=_attach_point_dict[LABEL_CASING]
   else:
     p=_attach_point_dict[LABEL_OFF_HAND]
@@ -919,6 +919,8 @@ def show_translate_modal():
     if file_box.get_animation_root(label) != root_name:
       continue
     jpath = os.path.join(current_dir,f"{label}{pref_ext()}")
+    if not os.path.exists(jpath):
+      jpath = os.path.join(current_dir,f"{label}{alt_ext()}")
     if not os.path.exists(jpath):
       continue
     jsons.append(jpath)

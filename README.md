@@ -45,7 +45,7 @@ Known Bugs:
   - ~~stereo files tend to crash, so please convert .WAV files to mono format before using~~ should be fixed
 ```
 
-### gungeon-gun-sprite-json-creator.py
+### gun-animation-editor-reloaded.py
 
 ```
 Requirements:
@@ -54,7 +54,7 @@ Requirements:
     - you can install all of the above with `pip install --user --break-system-packages dearpygui pillow numpy screeninfo`
 
 Basic Usage:
-  - running `gungeon-gun-sprite-json-creator.py` will open an editor interface and initiate a file picker dialog
+  - running `gun-animation-editor-reloaded.py` will open an editor interface and initiate a file picker dialog
     - opening a PNG of a gun sprite will automatically load its corresponding JSON file, if it exists
     - you can optionally pass the path to the sprite on the command line to open it directly
     - the editor will remember the last opened file upon closing
