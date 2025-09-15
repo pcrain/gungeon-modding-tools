@@ -8,6 +8,7 @@
 | gungeon-gun-sprite-json-creator.py | visual editor for hand attach points on gun sprites           |
 | annotate-assets.py                 | adds script and asset name annotations to extracted assets    |
 | steamdeck-installer.sh             | modded Gungeon installer for Steam Deck / most Linux distros  |
+| gungeon-save-decrypter.py          | small script for encrypting / decrypting gungeon save files   |
 |                                    |                                                               |
 
 ### gen-gungeon-audio-bank.py
@@ -98,4 +99,12 @@ Usage:
 
       chmod +x ./steamdeck-installer.sh
       ./steamdeck-installer.sh
+```
+
+### gungeon-save-decrypter.py
+```
+Usage:
+ - python gungeon-save-decrypter.py <path_to_save_file>
+  - if the save file is encrypted, prints the decrypted json to the console
+  - if the save file is decrypted, prints the encrypted binary data to the console
 ```
