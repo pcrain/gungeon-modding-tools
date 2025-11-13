@@ -25,7 +25,7 @@ ALLOW_AUTORUN = True # change to False if you don't wish to allow this script to
       fmt_header           : b'fmt '
       fmt_size             : 66
       [auto-1]             : 0
-      compression_code     : -1
+      wem_format           : -1
       channels             : 2
       sample_rate          : 44100
       avg_byte_rate        : 10458
@@ -64,6 +64,12 @@ ALLOW_AUTORUN = True # change to False if you don't wish to allow this script to
 #  - (maybe) finish up support for reversing .bnk to .wem / .wav files
 
 SCRIPT_DESCRIPTION = "create a WWise soundbank (.bnk) compatibile with Enter the Gungeon"
+
+# codec information from https://github.com/vgmstream/vgmstream/blob/86ef4c768977271616c309964c6f600389030e5f/src/meta/wwise.c#L898
+FMT_PCM_WWISE    =  1 #0x0001
+FMT_IMA_VARIABLE =  2 #0x0002
+FMT_VORBIS       = -1 #0xFFFF
+FMT_PCM_STANDARD = -2 #0xFFFE
 
 # Import necessary modules
 import sys, os, struct, io, wave, csv, argparse, time
@@ -603,7 +609,7 @@ class WEMParser(Parser):
     fmt_size = bs.asShort(root["fmt_size"], val=[24,66], tag="????? always 24 [wav i think?] or 66 [vorbis i think?]")
 
     bs.asShort(root[""],val=0, tag="????? always 0")
-    cc = bs.asShort(root["compression_code"],val=[-2,-1, 2], tag="compression code, always -2 for flat bitrate / no compression, -1 = ogg compression?, 2 = wav compression?")
+    cc = bs.asShort(root["wem_format"],val=[FMT_PCM_STANDARD, FMT_VORBIS, FMT_IMA_VARIABLE], tag="compression code: -2 = PCM, -1 = VORBIS, 2 = custom wwise ADPCM")
 
     bs.asShort(root["channels"],val=[1,2], tag="number of audio channels (1-2)")
     bs.asSigned(root["sample_rate"], tag="samples / second")
@@ -703,7 +709,7 @@ class WEMParser(Parser):
     root["fmt_header"]       = b"fmt "
     root["fmt_size"]         = 66 if isOgg else 24
     root[""]                 = 0
-    root["compression_code"] = -1 if isOgg else -2 # -2 == no compression
+    root["wem_format"]       = FMT_VORBIS if isOgg else FMT_PCM_STANDARD
     root["channels"]         = None
     root["sample_rate"]      = None
     root["avg_byte_rate"]    = None
