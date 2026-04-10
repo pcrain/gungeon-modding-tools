@@ -22,13 +22,13 @@ encrypted = raw[:len(VS)].decode() == VS
 if encrypted:
   decrypted = decrypt(raw)
   if md5(raw.decode()) == md5(encrypt(decrypted).decode()):
-    print(decrypted)
+    print(decrypted, end="")
   else:
     print("decryption failed")
 else:
   encrypted = raw.decode().strip()
   newraw = encrypt(encrypted)
   if md5(encrypted) == md5(decrypt(newraw)):
-    print(newraw)
+    print(newraw.decode(), end="")
   else:
     print("encryption failed")
